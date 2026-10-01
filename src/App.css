@@ -1,0 +1,266 @@
+.app {
+  max-width: 1540px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+.app-header {
+  margin-bottom: 18px;
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.3px;
+}
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 150px;
+}
+.control-group > .group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field > label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+select,
+input[type='number'] {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  outline: none;
+}
+select:focus,
+input:focus {
+  border-color: var(--accent);
+}
+
+/* Segmented control */
+.segmented {
+  display: inline-flex;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.segmented button {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.segmented button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+/* Per-string tuning editor */
+.tuning-editor {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tuning-editor .str {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.tuning-editor .str small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.tuning-editor select {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Fretboard */
+.fretboard-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.fretboard {
+  display: block;
+}
+
+.board {
+  fill: #10151c;
+  stroke: var(--border);
+}
+.nut {
+  stroke: #d7dee7;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.fret {
+  stroke: #313c49;
+  stroke-width: 2;
+}
+.string {
+  stroke: #9aa7b4;
+}
+.inlay {
+  fill: #28323e;
+}
+.fret-number {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+}
+.tuning-label {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.note {
+  stroke: rgba(0, 0, 0, 0.4);
+  stroke-width: 1.5;
+}
+.note-root {
+  fill: var(--root);
+}
+.note-scale {
+  fill: var(--scale);
+}
+.note-third {
+  fill: var(--third);
+}
+.note-fifth {
+  fill: var(--fifth);
+}
+.note-ghost {
+  fill: var(--ghost);
+  opacity: 0.55;
+}
+
+.note-label {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  pointer-events: none;
+}
+.note-label-fifth {
+  fill: #1a1304;
+}
+
+/* Legend */
+.legend {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.legend-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.legend-title .muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+.legend-items {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.swatch-root {
+  background: var(--root);
+}
+.swatch-scale {
+  background: var(--scale);
+}
+.swatch-third {
+  background: var(--third);
+}
+.swatch-fifth {
+  background: var(--fifth);
+}
+.swatch-ghost {
+  background: var(--ghost);
+}
+.legend-chord {
+  font-size: 14px;
+  color: var(--text);
+}
+.legend-chord strong {
+  color: var(--accent);
+}
+.muted {
+  color: var(--muted);
+}
