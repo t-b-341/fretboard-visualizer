@@ -19,6 +19,7 @@ interface Props {
   onFamily: (familyKey: FamilyKey) => void;
   onToggleCompare: (enabled: boolean) => void;
   onCompareFamily: (familyKey: FamilyKey) => void;
+  onComparePreset: (kind: 'parallel' | 'relative') => void;
 }
 
 export function Controls(props: Props) {
@@ -36,6 +37,7 @@ export function Controls(props: Props) {
     onFamily,
     onToggleCompare,
     onCompareFamily,
+    onComparePreset,
   } = props;
 
   // Note options in the current displayed label space. `value` is the concert
@@ -46,6 +48,15 @@ export function Controls(props: Props) {
   }));
 
   const triads = getAllDiatonicTriads(state.rootPc, mode.intervals);
+
+  // Tonality of the thing the overlay presets anchor to: the selected chord in
+  // Triad view, otherwise the primary scale. Drives the parallel/relative labels.
+  const anchorIsMajor =
+    state.viewMode === 'triad'
+      ? ['maj', 'aug'].includes(triads[state.triadDegree]?.quality ?? 'maj')
+      : mode.intervals[2] === 4;
+  const parallelLabel = anchorIsMajor ? 'Parallel minor' : 'Parallel major';
+  const relativeLabel = anchorIsMajor ? 'Relative minor' : 'Relative major';
 
   return (
     <div className="controls">
@@ -144,71 +155,80 @@ export function Controls(props: Props) {
         </div>
       </div>
 
-      {/* Compare / overlay (scale view only) */}
-      {state.viewMode === 'scale' && (
-        <div className="control-group">
-          <span className="group-label">Compare</span>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={state.compareEnabled}
-              onChange={(e) => onToggleCompare(e.target.checked)}
-            />
-            Overlay a second scale
-          </label>
-          {state.compareEnabled && (
-            <>
-              <div className="field">
-                <label>Overlay root</label>
-                <select
-                  value={state.compareRootPc}
-                  onChange={(e) => onUpdate({ compareRootPc: Number(e.target.value) })}
-                >
-                  {noteOptions.map((o) => (
-                    <option key={o.concertPc} value={o.concertPc}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+      {/* Compare / overlay */}
+      <div className="control-group">
+        <span className="group-label">Compare</span>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={state.compareEnabled}
+            onChange={(e) => onToggleCompare(e.target.checked)}
+          />
+          {state.viewMode === 'triad' ? 'Overlay a scale on the chord' : 'Overlay a second scale'}
+        </label>
+        {state.compareEnabled && (
+          <>
+            <div className="field">
+              <label>Quick set</label>
+              <div className="btn-row">
+                <button type="button" className="btn-mini" onClick={() => onComparePreset('parallel')}>
+                  {parallelLabel}
+                </button>
+                <button type="button" className="btn-mini" onClick={() => onComparePreset('relative')}>
+                  {relativeLabel}
+                </button>
               </div>
-              <div className="field">
-                <label>Overlay family</label>
-                <select
-                  value={compareFamily.key}
-                  onChange={(e) => onCompareFamily(e.target.value as FamilyKey)}
-                >
-                  {SCALE_FAMILIES.map((f) => (
-                    <option key={f.key} value={f.key}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label>Overlay mode</label>
-                <select
-                  value={compareMode.key}
-                  onChange={(e) => onUpdate({ compareModeKey: e.target.value })}
-                >
-                  {compareFamily.modes.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={state.sharedOnly}
-                  onChange={(e) => onUpdate({ sharedOnly: e.target.checked })}
-                />
-                Shared notes only
-              </label>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+            <div className="field">
+              <label>Overlay root</label>
+              <select
+                value={state.compareRootPc}
+                onChange={(e) => onUpdate({ compareRootPc: Number(e.target.value) })}
+              >
+                {noteOptions.map((o) => (
+                  <option key={o.concertPc} value={o.concertPc}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Overlay family</label>
+              <select
+                value={compareFamily.key}
+                onChange={(e) => onCompareFamily(e.target.value as FamilyKey)}
+              >
+                {SCALE_FAMILIES.map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Overlay mode</label>
+              <select
+                value={compareMode.key}
+                onChange={(e) => onUpdate({ compareModeKey: e.target.value })}
+              >
+                {compareFamily.modes.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={state.sharedOnly}
+                onChange={(e) => onUpdate({ sharedOnly: e.target.checked })}
+              />
+              {state.viewMode === 'triad' ? 'Chord tones in scale only' : 'Shared notes only'}
+            </label>
+          </>
+        )}
+      </div>
 
       {/* Display / chords */}
       <div className="control-group">

@@ -30,14 +30,20 @@ export function Legend(props: Props) {
     sharedCount,
   } = props;
 
-  const comparing = compareEnabled && viewMode === 'scale';
+  const comparingScale = compareEnabled && viewMode === 'scale';
+  const comparingTriad = compareEnabled && viewMode === 'triad';
 
   return (
     <div className="legend">
       <div className="legend-title">
-        {comparing ? (
+        {comparingScale ? (
           <>
             {rootName} {modeName} <span className="muted">vs</span> {compareRootName} {compareModeName}
+          </>
+        ) : comparingTriad ? (
+          <>
+            {chordRootName} {chordQualityName} <span className="muted">chord vs</span> {compareRootName}{' '}
+            {compareModeName}
           </>
         ) : (
           <>
@@ -47,11 +53,19 @@ export function Legend(props: Props) {
       </div>
 
       <div className="legend-items">
-        {comparing ? (
+        {comparingScale ? (
           <>
             <Item cls="shared" label={`In both (${sharedCount})`} />
             <Item cls="primaryOnly" label="Primary only" />
             <Item cls="overlayOnly" label="Overlay only" />
+          </>
+        ) : comparingTriad ? (
+          <>
+            <Item cls="root" label="Chord root" />
+            <Item cls="third" label="3rd" />
+            <Item cls="fifth" label="5th" />
+            <Item cls="scale" label="Scale tone" />
+            <span className="legend-note muted">Dashed ring = chord tone outside the scale</span>
           </>
         ) : viewMode === 'scale' ? (
           <>

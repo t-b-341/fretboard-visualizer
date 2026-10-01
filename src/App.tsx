@@ -98,18 +98,54 @@ export default function App() {
   };
 
   const handleToggleCompare = (enabled: boolean) => {
-    // When turning the overlay on, start it on the primary root so it defaults
-    // to a parallel-mode comparison (e.g. Bb major vs Bb minor).
-    setState((s) => ({
-      ...s,
-      compareEnabled: enabled,
-      compareRootPc: enabled ? s.rootPc : s.compareRootPc,
-    }));
+    setState((s) => {
+      if (!enabled) return { ...s, compareEnabled: false };
+      // Anchor the overlay to whatever is in focus: the chord root in Triad view
+      // (for a chord-vs-scale read), otherwise the primary scale root. This makes
+      // the default a parallel comparison (e.g. Bb major vs Bb minor).
+      const fam = getFamily(s.familyKey);
+      const m = fam.modes.find((x) => x.key === s.modeKey) ?? fam.modes[0];
+      const baseRoot =
+        s.viewMode === 'triad'
+          ? getDiatonicTriad(s.rootPc, m.intervals, s.triadDegree).rootPc
+          : s.rootPc;
+      return { ...s, compareEnabled: true, compareRootPc: baseRoot };
+    });
   };
 
   const handleCompareFamily = (familyKey: FamilyKey) => {
     const fam = getFamily(familyKey);
     setState((s) => ({ ...s, compareFamilyKey: familyKey, compareModeKey: fam.modes[0].key }));
+  };
+
+  // Quick overlay presets: set the overlay to the parallel or relative
+  // major/minor of whatever is in focus (the chord in Triad view, else the
+  // primary scale). Natural minor and major both live in the "major" family.
+  const handleComparePreset = (kind: 'parallel' | 'relative') => {
+    setState((s) => {
+      const fam = getFamily(s.familyKey);
+      const m = fam.modes.find((x) => x.key === s.modeKey) ?? fam.modes[0];
+      let anchorRoot: number;
+      let anchorIsMajor: boolean;
+      if (s.viewMode === 'triad') {
+        const t = getDiatonicTriad(s.rootPc, m.intervals, s.triadDegree);
+        anchorRoot = t.rootPc;
+        anchorIsMajor = t.quality === 'maj' || t.quality === 'aug';
+      } else {
+        anchorRoot = s.rootPc;
+        anchorIsMajor = m.intervals[2] === 4;
+      }
+      const targetModeKey = anchorIsMajor ? 'Aeolian' : 'Ionian';
+      const relShift = anchorIsMajor ? 9 : 3; // major -> relative minor (+9); minor -> relative major (+3)
+      const targetRoot = kind === 'parallel' ? anchorRoot : mod(anchorRoot + relShift, 12);
+      return {
+        ...s,
+        compareEnabled: true,
+        compareFamilyKey: 'major',
+        compareModeKey: targetModeKey,
+        compareRootPc: targetRoot,
+      };
+    });
   };
 
   const family = getFamily(state.familyKey);
@@ -171,6 +207,7 @@ export default function App() {
         onFamily={handleFamily}
         onToggleCompare={handleToggleCompare}
         onCompareFamily={handleCompareFamily}
+        onComparePreset={handleComparePreset}
       />
 
       <Fretboard

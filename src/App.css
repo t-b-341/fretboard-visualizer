@@ -293,3 +293,36 @@ input:focus {
 .muted {
   color: var(--muted);
 }
+
+/* Overlay quick-set buttons */
+.btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.btn-mini {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-mini:hover {
+  border-color: var(--accent);
+}
+
+/* Chord tone that lies outside the overlaid scale (triad compare) */
+.note-outside-ring {
+  fill: none;
+  stroke: var(--root);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.legend-note {
+  font-size: 12px;
+  width: 100%;
+}

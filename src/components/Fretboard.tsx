@@ -68,7 +68,7 @@ export function Fretboard(props: Props) {
   const noteX = (fret: number) => (fret === 0 ? OPEN_X : NUT_X + (fret - 0.5) * FRET_W);
   const fretLineX = (f: number) => NUT_X + f * FRET_W;
 
-  function evaluate(pc: number): { role: Role; label: string; ring?: boolean } | null {
+  function evaluate(pc: number): { role: Role; label: string; ring?: boolean; outside?: boolean } | null {
     const idx = pcToIndex.get(pc);
     const inScale = idx !== undefined;
 
@@ -100,12 +100,34 @@ export function Fretboard(props: Props) {
     }
 
     // Triad view
-    let role: Role | null = null;
-    if (pc === triad.pitches[0]) role = 'root';
-    else if (pc === triad.pitches[1]) role = 'third';
-    else if (pc === triad.pitches[2]) role = 'fifth';
+    let chordRole: Role | null = null;
+    if (pc === triad.pitches[0]) chordRole = 'root';
+    else if (pc === triad.pitches[1]) chordRole = 'third';
+    else if (pc === triad.pitches[2]) chordRole = 'fifth';
 
-    if (role) return { role, label: labelFor() };
+    // Compare: overlay a scale on the chord. Chord tones keep their colours; the
+    // scale's remaining notes show as colour tones. Everything is labelled
+    // relative to the chord root, and chord tones that fall outside the overlaid
+    // scale get a dashed ring to flag the clash.
+    if (compareEnabled) {
+      const inOverlay = comparePcSet.has(pc);
+      const label =
+        displayMode === 'note'
+          ? noteName(mod(pc + shift, 12))
+          : chromaticDegreeLabel(mod(pc - triad.rootPc, 12));
+      if (chordRole) {
+        if (sharedOnly && !inOverlay) return null;
+        return { role: chordRole, label, ring: pc === compareRootPc, outside: !inOverlay };
+      }
+      if (inOverlay && !sharedOnly) {
+        // Non-chord scale notes = colour/tension tones. Use the blue "scale"
+        // colour so the red/green/gold chord tones stay visually distinct.
+        return { role: 'scale', label, ring: pc === compareRootPc };
+      }
+      return null;
+    }
+
+    if (chordRole) return { role: chordRole, label: labelFor() };
     if (inScale && ghostScale) return { role: 'ghost', label: '' };
     return null;
   }
@@ -202,6 +224,7 @@ export function Fretboard(props: Props) {
               <g key={`n-${si}-${cell.fret}`}>
                 <circle className={`note note-${ev.role}`} cx={x} cy={y} r={R} />
                 {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                {ev.outside && <circle className="note-outside-ring" cx={x} cy={y} r={R + 3} />}
                 <text
                   className={`note-label note-label-${ev.role}`}
                   x={x}
