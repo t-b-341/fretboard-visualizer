@@ -2,7 +2,7 @@ import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
 import type { Triad } from '../music/chords';
 import type { DisplayMode, ViewMode } from '../App';
-import { mod, noteName } from '../music/notes';
+import { chromaticDegreeLabel, mod, noteName } from '../music/notes';
 import { scaleDegreeLabel } from '../music/scales';
 
 interface Props {
@@ -17,6 +17,10 @@ interface Props {
   displayMode: DisplayMode;
   shift: number;
   ghostScale: boolean;
+  compareEnabled: boolean;
+  comparePcSet: Set<number>;
+  compareRootPc: number;
+  sharedOnly: boolean;
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -32,7 +36,7 @@ const NUT_X = 92;
 const RIGHT_PAD = 24;
 const R = 13;
 
-type Role = 'root' | 'third' | 'fifth' | 'scale' | 'ghost';
+type Role = 'root' | 'third' | 'fifth' | 'scale' | 'ghost' | 'shared' | 'primaryOnly' | 'overlayOnly';
 
 export function Fretboard(props: Props) {
   const {
@@ -47,6 +51,10 @@ export function Fretboard(props: Props) {
     displayMode,
     shift,
     ghostScale,
+    compareEnabled,
+    comparePcSet,
+    compareRootPc,
+    sharedOnly,
   } = props;
 
   const numStrings = tuning.length;
@@ -60,7 +68,7 @@ export function Fretboard(props: Props) {
   const noteX = (fret: number) => (fret === 0 ? OPEN_X : NUT_X + (fret - 0.5) * FRET_W);
   const fretLineX = (f: number) => NUT_X + f * FRET_W;
 
-  function evaluate(pc: number): { role: Role; label: string } | null {
+  function evaluate(pc: number): { role: Role; label: string; ring?: boolean } | null {
     const idx = pcToIndex.get(pc);
     const inScale = idx !== undefined;
 
@@ -70,6 +78,23 @@ export function Fretboard(props: Props) {
         : scaleDegreeLabel(intervals, idx as number);
 
     if (viewMode === 'scale') {
+      // Comparison / overlay mode: colour by set membership, label overlay-only
+      // tones by their chromatic degree relative to the primary root.
+      if (compareEnabled) {
+        const inCompare = comparePcSet.has(pc);
+        if (!inScale && !inCompare) return null;
+        if (sharedOnly && !(inScale && inCompare)) return null;
+        const role: Role = inScale && inCompare ? 'shared' : inScale ? 'primaryOnly' : 'overlayOnly';
+        const ring = pc === rootPc || pc === compareRootPc;
+        const label =
+          displayMode === 'note'
+            ? noteName(mod(pc + shift, 12))
+            : inScale
+              ? scaleDegreeLabel(intervals, idx as number)
+              : chromaticDegreeLabel(mod(pc - rootPc, 12));
+        return { role, label, ring };
+      }
+
       if (!inScale) return null;
       return { role: pc === rootPc ? 'root' : 'scale', label: labelFor() };
     }
@@ -176,6 +201,7 @@ export function Fretboard(props: Props) {
             return (
               <g key={`n-${si}-${cell.fret}`}>
                 <circle className={`note note-${ev.role}`} cx={x} cy={y} r={R} />
+                {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
                 <text
                   className={`note-label note-label-${ev.role}`}
                   x={x}

@@ -189,6 +189,23 @@ input:focus {
   opacity: 0.55;
 }
 
+/* Comparison / overlay roles */
+.note-shared {
+  fill: var(--shared);
+}
+.note-primaryOnly {
+  fill: var(--scale);
+}
+.note-overlayOnly {
+  fill: var(--overlay);
+}
+.note-root-ring {
+  fill: none;
+  stroke: #ffd36b;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
 .note-label {
   fill: #fff;
   font-size: 11px;
@@ -197,6 +214,9 @@ input:focus {
   pointer-events: none;
 }
 .note-label-fifth {
+  fill: #1a1304;
+}
+.note-label-overlayOnly {
   fill: #1a1304;
 }
 
@@ -253,6 +273,15 @@ input:focus {
 }
 .swatch-ghost {
   background: var(--ghost);
+}
+.swatch-shared {
+  background: var(--shared);
+}
+.swatch-primaryOnly {
+  background: var(--scale);
+}
+.swatch-overlayOnly {
+  background: var(--overlay);
 }
 .legend-chord {
   font-size: 14px;

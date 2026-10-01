@@ -29,6 +29,11 @@ export interface AppState {
   labelMode: LabelMode;
   displayMode: DisplayMode;
   ghostScale: boolean;
+  compareEnabled: boolean;
+  compareRootPc: number;
+  compareFamilyKey: FamilyKey;
+  compareModeKey: string;
+  sharedOnly: boolean;
 }
 
 function createInitialState(): AppState {
@@ -46,6 +51,11 @@ function createInitialState(): AppState {
     labelMode: 'concert',
     displayMode: 'note',
     ghostScale: true,
+    compareEnabled: false,
+    compareRootPc: 10,
+    compareFamilyKey: 'major',
+    compareModeKey: 'Aeolian', // parallel natural minor by default
+    sharedOnly: false,
   };
 }
 
@@ -87,6 +97,21 @@ export default function App() {
     setState((s) => ({ ...s, familyKey, modeKey: fam.modes[0].key, triadDegree: 0 }));
   };
 
+  const handleToggleCompare = (enabled: boolean) => {
+    // When turning the overlay on, start it on the primary root so it defaults
+    // to a parallel-mode comparison (e.g. Bb major vs Bb minor).
+    setState((s) => ({
+      ...s,
+      compareEnabled: enabled,
+      compareRootPc: enabled ? s.rootPc : s.compareRootPc,
+    }));
+  };
+
+  const handleCompareFamily = (familyKey: FamilyKey) => {
+    const fam = getFamily(familyKey);
+    setState((s) => ({ ...s, compareFamilyKey: familyKey, compareModeKey: fam.modes[0].key }));
+  };
+
   const family = getFamily(state.familyKey);
   const mode = family.modes.find((m) => m.key === state.modeKey) ?? family.modes[0];
   const intervals = mode.intervals;
@@ -110,6 +135,21 @@ export default function App() {
     [state.tuning, state.fretCount],
   );
 
+  const compareFamily = getFamily(state.compareFamilyKey);
+  const compareMode =
+    compareFamily.modes.find((m) => m.key === state.compareModeKey) ?? compareFamily.modes[0];
+  const compareIntervals = compareMode.intervals;
+
+  const comparePcs = useMemo(
+    () => getScaleNotes(state.compareRootPc, compareIntervals),
+    [state.compareRootPc, compareIntervals],
+  );
+  const comparePcSet = useMemo(() => new Set(comparePcs), [comparePcs]);
+  const sharedCount = useMemo(
+    () => (state.compareEnabled ? scalePcs.filter((pc) => comparePcSet.has(pc)).length : 0),
+    [scalePcs, comparePcSet, state.compareEnabled],
+  );
+
   return (
     <div className="app">
       <header className="app-header">
@@ -121,12 +161,16 @@ export default function App() {
         state={state}
         family={family}
         mode={mode}
+        compareFamily={compareFamily}
+        compareMode={compareMode}
         shift={shift}
         onUpdate={update}
         onNumStrings={handleNumStrings}
         onPreset={handlePreset}
         onStringEdit={handleStringEdit}
         onFamily={handleFamily}
+        onToggleCompare={handleToggleCompare}
+        onCompareFamily={handleCompareFamily}
       />
 
       <Fretboard
@@ -141,6 +185,10 @@ export default function App() {
         displayMode={state.displayMode}
         shift={shift}
         ghostScale={state.ghostScale}
+        compareEnabled={state.compareEnabled}
+        comparePcSet={comparePcSet}
+        compareRootPc={state.compareRootPc}
+        sharedOnly={state.sharedOnly}
       />
 
       <Legend
@@ -151,6 +199,10 @@ export default function App() {
         familyName={family.name}
         chordRootName={noteName(mod(triad.rootPc + shift, 12))}
         chordQualityName={qualityName(triad.quality)}
+        compareEnabled={state.compareEnabled}
+        compareRootName={noteName(mod(state.compareRootPc + shift, 12))}
+        compareModeName={compareMode.name}
+        sharedCount={sharedCount}
       />
     </div>
   );

@@ -29,3 +29,15 @@ export function noteName(pc: number, preferFlats = true): string {
 export function labelShift(mode: 'concert' | 'standard'): number {
   return mode === 'standard' ? 1 : 0;
 }
+
+// Flat-based chromatic degree names for an interval (0-11 semitones) above a root.
+const CHROMATIC_DEGREES = ['1', 'b2', '2', 'b3', '3', '4', 'b5', '5', 'b6', '6', 'b7', '7'];
+
+/**
+ * Degree label for any chromatic interval above a reference root. Used to label
+ * notes that are not diatonic to the reference scale (for example an overlaid
+ * scale's unique tones), measured relative to the primary root.
+ */
+export function chromaticDegreeLabel(interval: number): string {
+  return CHROMATIC_DEGREES[mod(interval, 12)];
+}

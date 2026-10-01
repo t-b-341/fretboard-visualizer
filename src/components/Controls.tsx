@@ -9,17 +9,34 @@ interface Props {
   state: AppState;
   family: FamilyDef;
   mode: ModeDef;
+  compareFamily: FamilyDef;
+  compareMode: ModeDef;
   shift: number;
   onUpdate: (patch: Partial<AppState>) => void;
   onNumStrings: (n: 7 | 8) => void;
   onPreset: (id: string) => void;
   onStringEdit: (stringIndex: number, pc: number) => void;
   onFamily: (familyKey: FamilyKey) => void;
+  onToggleCompare: (enabled: boolean) => void;
+  onCompareFamily: (familyKey: FamilyKey) => void;
 }
 
 export function Controls(props: Props) {
-  const { state, family, mode, shift, onUpdate, onNumStrings, onPreset, onStringEdit, onFamily } =
-    props;
+  const {
+    state,
+    family,
+    mode,
+    compareFamily,
+    compareMode,
+    shift,
+    onUpdate,
+    onNumStrings,
+    onPreset,
+    onStringEdit,
+    onFamily,
+    onToggleCompare,
+    onCompareFamily,
+  } = props;
 
   // Note options in the current displayed label space. `value` is the concert
   // pitch class, `label` is the displayed name (shifted in Standard mode).
@@ -126,6 +143,72 @@ export function Controls(props: Props) {
           </select>
         </div>
       </div>
+
+      {/* Compare / overlay (scale view only) */}
+      {state.viewMode === 'scale' && (
+        <div className="control-group">
+          <span className="group-label">Compare</span>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={state.compareEnabled}
+              onChange={(e) => onToggleCompare(e.target.checked)}
+            />
+            Overlay a second scale
+          </label>
+          {state.compareEnabled && (
+            <>
+              <div className="field">
+                <label>Overlay root</label>
+                <select
+                  value={state.compareRootPc}
+                  onChange={(e) => onUpdate({ compareRootPc: Number(e.target.value) })}
+                >
+                  {noteOptions.map((o) => (
+                    <option key={o.concertPc} value={o.concertPc}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Overlay family</label>
+                <select
+                  value={compareFamily.key}
+                  onChange={(e) => onCompareFamily(e.target.value as FamilyKey)}
+                >
+                  {SCALE_FAMILIES.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Overlay mode</label>
+                <select
+                  value={compareMode.key}
+                  onChange={(e) => onUpdate({ compareModeKey: e.target.value })}
+                >
+                  {compareFamily.modes.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={state.sharedOnly}
+                  onChange={(e) => onUpdate({ sharedOnly: e.target.checked })}
+                />
+                Shared notes only
+              </label>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Display / chords */}
       <div className="control-group">

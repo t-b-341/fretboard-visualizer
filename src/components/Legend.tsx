@@ -9,19 +9,51 @@ interface Props {
   familyName: string;
   chordRootName: string;
   chordQualityName: string;
+  compareEnabled: boolean;
+  compareRootName: string;
+  compareModeName: string;
+  sharedCount: number;
 }
 
 export function Legend(props: Props) {
-  const { viewMode, triad, rootName, modeName, familyName, chordRootName, chordQualityName } = props;
+  const {
+    viewMode,
+    triad,
+    rootName,
+    modeName,
+    familyName,
+    chordRootName,
+    chordQualityName,
+    compareEnabled,
+    compareRootName,
+    compareModeName,
+    sharedCount,
+  } = props;
+
+  const comparing = compareEnabled && viewMode === 'scale';
 
   return (
     <div className="legend">
       <div className="legend-title">
-        {rootName} {modeName} <span className="muted">&middot; {familyName}</span>
+        {comparing ? (
+          <>
+            {rootName} {modeName} <span className="muted">vs</span> {compareRootName} {compareModeName}
+          </>
+        ) : (
+          <>
+            {rootName} {modeName} <span className="muted">&middot; {familyName}</span>
+          </>
+        )}
       </div>
 
       <div className="legend-items">
-        {viewMode === 'scale' ? (
+        {comparing ? (
+          <>
+            <Item cls="shared" label={`In both (${sharedCount})`} />
+            <Item cls="primaryOnly" label="Primary only" />
+            <Item cls="overlayOnly" label="Overlay only" />
+          </>
+        ) : viewMode === 'scale' ? (
           <>
             <Item cls="root" label="Root" />
             <Item cls="scale" label="Scale tone" />
