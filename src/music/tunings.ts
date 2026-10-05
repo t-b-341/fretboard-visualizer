@@ -24,6 +24,20 @@ function s(pc: number, octave: number): GuitarString {
 
 export const TUNING_PRESETS: TuningPreset[] = [
   {
+    id: '6-bass-bb-standard',
+    name: '6-string bass \u00b7 Bb standard',
+    strings: 6,
+    // Bb0 Eb1 Ab1 Db2 Gb2 B2 (standard 6-string bass, a half step down)
+    notes: [s(10, 0), s(3, 1), s(8, 1), s(1, 2), s(6, 2), s(11, 2)],
+  },
+  {
+    id: '6-bass-standard',
+    name: '6-string bass \u00b7 standard',
+    strings: 6,
+    // B0 E1 A1 D2 G2 C3
+    notes: [s(11, 0), s(4, 1), s(9, 1), s(2, 2), s(7, 2), s(0, 3)],
+  },
+  {
     id: '7-half-down',
     name: '7-string \u00b7 half step down',
     strings: 7,
@@ -58,5 +72,7 @@ export function getPreset(id: string): TuningPreset | undefined {
 }
 
 export function defaultPresetForStrings(strings: number): TuningPreset {
-  return strings === 8 ? getPreset('8-half-down')! : getPreset('7-half-down')!;
+  if (strings === 8) return getPreset('8-half-down')!;
+  if (strings === 6) return getPreset('6-bass-bb-standard')!;
+  return getPreset('7-half-down')!;
 }

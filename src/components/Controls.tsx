@@ -13,7 +13,7 @@ interface Props {
   compareMode: ModeDef;
   shift: number;
   onUpdate: (patch: Partial<AppState>) => void;
-  onNumStrings: (n: 7 | 8) => void;
+  onNumStrings: (n: 6 | 7 | 8) => void;
   onPreset: (id: string) => void;
   onStringEdit: (stringIndex: number, pc: number) => void;
   onFamily: (familyKey: FamilyKey) => void;
@@ -64,13 +64,13 @@ export function Controls(props: Props) {
       <div className="control-group">
         <span className="group-label">Instrument</span>
         <div className="segmented" role="group" aria-label="Number of strings">
-          {[7, 8].map((n) => (
+          {[6, 7, 8].map((n) => (
             <button
               key={n}
               className={state.numStrings === n ? 'active' : ''}
-              onClick={() => onNumStrings(n as 7 | 8)}
+              onClick={() => onNumStrings(n as 6 | 7 | 8)}
             >
-              {n}-string
+              {n === 6 ? '6-string bass' : `${n}-string`}
             </button>
           ))}
         </div>

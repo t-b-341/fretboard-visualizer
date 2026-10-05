@@ -17,7 +17,7 @@ export type LabelMode = 'concert' | 'standard';
 export type DisplayMode = 'note' | 'degree';
 
 export interface AppState {
-  numStrings: 7 | 8;
+  numStrings: 6 | 7 | 8;
   tuningId: string;
   tuning: GuitarString[];
   fretCount: number;
@@ -63,7 +63,7 @@ export default function App() {
   const [state, setState] = useState<AppState>(createInitialState);
   const update = (patch: Partial<AppState>) => setState((s) => ({ ...s, ...patch }));
 
-  const handleNumStrings = (n: 7 | 8) => {
+  const handleNumStrings = (n: 6 | 7 | 8) => {
     const preset = defaultPresetForStrings(n);
     setState((s) => ({
       ...s,
@@ -79,7 +79,7 @@ export default function App() {
     setState((s) => ({
       ...s,
       tuningId: preset.id,
-      numStrings: preset.strings as 7 | 8,
+      numStrings: preset.strings as 6 | 7 | 8,
       tuning: preset.notes.map((x) => ({ ...x })),
     }));
   };
@@ -190,7 +190,9 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>Fretboard Visualizer</h1>
-        <p className="subtitle">7 &amp; 8 string &middot; scales, modes &amp; diatonic triads</p>
+        <p className="subtitle">
+          6-string bass &amp; 7/8-string guitar &middot; scales, modes &amp; diatonic triads
+        </p>
       </header>
 
       <Controls
