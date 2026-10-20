@@ -1,0 +1,95 @@
+.prog-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.prog-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.prog-key {
+  font-size: 12px;
+}
+
+.prog-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.prog-sublabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  min-width: 62px;
+}
+
+.prog-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 42px;
+  align-items: center;
+  padding: 4px 0;
+}
+.prog-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.prog-chip-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  padding: 5px 11px;
+  cursor: pointer;
+  line-height: 1.15;
+}
+.prog-chip-symbol {
+  font-size: 14px;
+  font-weight: 700;
+}
+.prog-chip-roman {
+  font-size: 10px;
+  color: var(--muted);
+}
+.prog-chip-x {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 14px;
+}
+.prog-chip-x:hover {
+  color: var(--root);
+}
+.prog-chip.selected {
+  border-color: var(--accent);
+}
+.prog-chip.playing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.4);
+}
+.prog-chip.out {
+  border-color: #6b5120;
+}
+.prog-chip.out .prog-chip-symbol {
+  color: var(--overlay);
+}

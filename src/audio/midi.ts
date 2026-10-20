@@ -206,3 +206,12 @@ export function triadToMidi(pitches: number[], octave: number): number[] {
   const rootMidi = (octave + 1) * 12 + root;
   return pitches.map((pc) => rootMidi + ((pc - root + 12) % 12));
 }
+
+/**
+ * Voice a chord as spread MIDI notes from its intervals (semitones above the
+ * root, which may exceed 12 for upper extensions). `octave` 4 -> root MIDI 60.
+ */
+export function chordToMidi(rootPc: number, intervalsFromRoot: number[], octave: number): number[] {
+  const rootMidi = (octave + 1) * 12 + rootPc;
+  return intervalsFromRoot.map((i) => rootMidi + i);
+}

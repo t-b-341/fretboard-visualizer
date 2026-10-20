@@ -4,16 +4,18 @@ import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
 import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
+import { MidiControls } from './components/MidiControls';
+import { ProgressionControls } from './components/ProgressionControls';
 import { getFamily, getScaleNotes } from './music/scales';
 import type { FamilyKey } from './music/scales';
-import { getDiatonicTriad, qualityName } from './music/chords';
-import type { Triad } from './music/chords';
+import { chordInKey, chordSymbol, getDiatonicTriad, qualityName, romanForChord } from './music/chords';
+import type { Chord, Triad } from './music/chords';
 import { defaultPresetForStrings, getPreset } from './music/tunings';
 import type { GuitarString } from './music/tunings';
 import { buildGrid } from './music/fretboard';
 import { labelShift, mod, noteName } from './music/notes';
 
-export type ViewMode = 'scale' | 'triad';
+export type ViewMode = 'scale' | 'triad' | 'chord';
 export type LabelMode = 'concert' | 'standard';
 export type DisplayMode = 'note' | 'degree';
 export type InstrumentView = 'fretboard' | 'keyboard' | 'both';
@@ -28,6 +30,7 @@ export interface AppState {
   modeKey: string;
   viewMode: ViewMode;
   triadDegree: number;
+  activeChord: Chord | null;
   labelMode: LabelMode;
   displayMode: DisplayMode;
   instrumentView: InstrumentView;
@@ -52,6 +55,7 @@ function createInitialState(): AppState {
     modeKey: 'Ionian',
     viewMode: 'scale',
     triadDegree: 0,
+    activeChord: null,
     labelMode: 'concert',
     displayMode: 'note',
     instrumentView: 'both',
@@ -101,6 +105,12 @@ export default function App() {
   const handleFamily = (familyKey: FamilyKey) => {
     const fam = getFamily(familyKey);
     setState((s) => ({ ...s, familyKey, modeKey: fam.modes[0].key, triadDegree: 0 }));
+  };
+
+  // Show a chord on the instruments (from the builder or a progression step),
+  // switching into chord view so it is visible.
+  const handleShowChord = (chord: Chord | null) => {
+    setState((s) => ({ ...s, activeChord: chord, viewMode: 'chord' }));
   };
 
   const handleToggleCompare = (enabled: boolean) => {
@@ -192,6 +202,10 @@ export default function App() {
     [scalePcs, comparePcSet, state.compareEnabled],
   );
 
+  const activeChordSymbol = state.activeChord ? chordSymbol(state.activeChord, shift) : undefined;
+  const activeChordRoman = state.activeChord ? romanForChord(state.rootPc, state.activeChord) : undefined;
+  const activeChordInKey = state.activeChord ? chordInKey(scalePcs, state.activeChord) : undefined;
+
   return (
     <div className="app">
       <header className="app-header">
@@ -218,6 +232,20 @@ export default function App() {
         onComparePreset={handleComparePreset}
       />
 
+      <MidiControls rootPc={state.rootPc} intervals={intervals} triad={triad} />
+
+      <ProgressionControls
+        rootPc={state.rootPc}
+        intervals={intervals}
+        scalePcs={scalePcs}
+        shift={shift}
+        active={state.viewMode === 'chord'}
+        activeChord={state.activeChord}
+        ghostScale={state.ghostScale}
+        onShowChord={handleShowChord}
+        onGhostScale={(v) => update({ ghostScale: v })}
+      />
+
       <div className="instrument-views">
         {(state.instrumentView === 'fretboard' || state.instrumentView === 'both') && (
           <Fretboard
@@ -229,6 +257,7 @@ export default function App() {
             pcToIndex={pcToIndex}
             viewMode={state.viewMode}
             triad={triad}
+            activeChord={state.activeChord}
             displayMode={state.displayMode}
             shift={shift}
             ghostScale={state.ghostScale}
@@ -246,6 +275,7 @@ export default function App() {
             pcToIndex={pcToIndex}
             viewMode={state.viewMode}
             triad={triad}
+            activeChord={state.activeChord}
             displayMode={state.displayMode}
             shift={shift}
             ghostScale={state.ghostScale}
@@ -269,6 +299,9 @@ export default function App() {
         compareRootName={noteName(mod(state.compareRootPc + shift, 12))}
         compareModeName={compareMode.name}
         sharedCount={sharedCount}
+        activeChordSymbol={activeChordSymbol}
+        activeChordRoman={activeChordRoman}
+        activeChordInKey={activeChordInKey}
       />
     </div>
   );

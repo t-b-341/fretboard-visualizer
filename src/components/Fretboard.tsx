@@ -1,6 +1,6 @@
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
-import type { Triad } from '../music/chords';
+import type { Chord, Triad } from '../music/chords';
 import type { DisplayMode, ViewMode } from '../App';
 import { mod, noteName } from '../music/notes';
 import { createEvaluator } from '../music/highlight';
@@ -14,6 +14,7 @@ interface Props {
   pcToIndex: Map<number, number>;
   viewMode: ViewMode;
   triad: Triad;
+  activeChord: Chord | null;
   displayMode: DisplayMode;
   shift: number;
   ghostScale: boolean;
@@ -46,6 +47,7 @@ export function Fretboard(props: Props) {
     pcToIndex,
     viewMode,
     triad,
+    activeChord,
     displayMode,
     shift,
     ghostScale,
@@ -72,6 +74,7 @@ export function Fretboard(props: Props) {
     pcToIndex,
     viewMode,
     triad,
+    activeChord,
     displayMode,
     shift,
     ghostScale,

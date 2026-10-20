@@ -278,6 +278,12 @@ export function Controls(props: Props) {
             >
               Triad
             </button>
+            <button
+              className={state.viewMode === 'chord' ? 'active' : ''}
+              onClick={() => onUpdate({ viewMode: 'chord' })}
+            >
+              Chords
+            </button>
           </div>
         </div>
         {state.viewMode === 'triad' && (

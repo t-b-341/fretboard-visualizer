@@ -1,4 +1,4 @@
-import type { Triad } from '../music/chords';
+import type { Chord, Triad } from '../music/chords';
 import type { DisplayMode, ViewMode } from '../App';
 import { createEvaluator } from '../music/highlight';
 
@@ -10,6 +10,7 @@ interface Props {
   pcToIndex: Map<number, number>;
   viewMode: ViewMode;
   triad: Triad;
+  activeChord: Chord | null;
   displayMode: DisplayMode;
   shift: number;
   ghostScale: boolean;

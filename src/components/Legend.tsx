@@ -13,6 +13,10 @@ interface Props {
   compareRootName: string;
   compareModeName: string;
   sharedCount: number;
+  /** Chord-view summary (symbol with root, Roman numeral, in/out of key). */
+  activeChordSymbol?: string;
+  activeChordRoman?: string;
+  activeChordInKey?: boolean;
 }
 
 export function Legend(props: Props) {
@@ -28,15 +32,31 @@ export function Legend(props: Props) {
     compareRootName,
     compareModeName,
     sharedCount,
+    activeChordSymbol,
+    activeChordRoman,
+    activeChordInKey,
   } = props;
 
+  const chordView = viewMode === 'chord';
   const comparingScale = compareEnabled && viewMode === 'scale';
   const comparingTriad = compareEnabled && viewMode === 'triad';
 
   return (
     <div className="legend">
       <div className="legend-title">
-        {comparingScale ? (
+        {chordView ? (
+          activeChordSymbol ? (
+            <>
+              {activeChordSymbol}{' '}
+              <span className="muted">
+                &middot; {activeChordRoman} &middot;{' '}
+                {activeChordInKey ? 'in key' : 'outside the key'}
+              </span>
+            </>
+          ) : (
+            <span className="muted">Pick or add a chord</span>
+          )
+        ) : comparingScale ? (
           <>
             {rootName} {modeName} <span className="muted">vs</span> {compareRootName} {compareModeName}
           </>
@@ -53,7 +73,16 @@ export function Legend(props: Props) {
       </div>
 
       <div className="legend-items">
-        {comparingScale ? (
+        {chordView ? (
+          <>
+            <Item cls="root" label="Root" />
+            <Item cls="third" label="3rd" />
+            <Item cls="fifth" label="5th" />
+            <Item cls="seventh" label="6th / 7th" />
+            <Item cls="ext" label="9 / 11 / 13" />
+            <span className="legend-note muted">Dashed ring = note outside the key</span>
+          </>
+        ) : comparingScale ? (
           <>
             <Item cls="shared" label={`In both (${sharedCount})`} />
             <Item cls="primaryOnly" label="Primary only" />

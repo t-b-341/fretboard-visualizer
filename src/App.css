@@ -213,6 +213,12 @@ input:focus {
 .note-fifth {
   fill: var(--fifth);
 }
+.note-seventh {
+  fill: var(--seventh);
+}
+.note-ext {
+  fill: var(--ext);
+}
 .note-ghost {
   fill: var(--ghost);
   opacity: 0.55;
@@ -299,6 +305,12 @@ input:focus {
 }
 .swatch-fifth {
   background: var(--fifth);
+}
+.swatch-seventh {
+  background: var(--seventh);
+}
+.swatch-ext {
+  background: var(--ext);
 }
 .swatch-ghost {
   background: var(--ghost);

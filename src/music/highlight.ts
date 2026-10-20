@@ -6,7 +6,7 @@
 // matter which diagram it is drawn on.
 
 import type { DisplayMode, ViewMode } from '../App';
-import type { Triad } from './chords';
+import type { Chord, Triad } from './chords';
 import { chromaticDegreeLabel, mod, noteName } from './notes';
 import { scaleDegreeLabel } from './scales';
 
@@ -14,6 +14,8 @@ export type Role =
   | 'root'
   | 'third'
   | 'fifth'
+  | 'seventh'
+  | 'ext'
   | 'scale'
   | 'ghost'
   | 'shared'
@@ -35,6 +37,8 @@ export interface HighlightContext {
   pcToIndex: Map<number, number>;
   viewMode: ViewMode;
   triad: Triad;
+  /** The chord shown in 'chord' view (builder pick or progression step). */
+  activeChord: Chord | null;
   displayMode: DisplayMode;
   shift: number;
   ghostScale: boolean;
@@ -56,6 +60,7 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
     pcToIndex,
     viewMode,
     triad,
+    activeChord,
     displayMode,
     shift,
     ghostScale,
@@ -64,6 +69,19 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
     compareRootPc,
     sharedOnly,
   } = ctx;
+
+  // Pre-map the active chord's pitch classes to their role and degree label.
+  const chordRoleByPc = new Map<number, Role>();
+  const chordDegreeByPc = new Map<number, string>();
+  if (activeChord) {
+    for (const t of activeChord.tones) {
+      const pc = mod(activeChord.rootPc + t.interval, 12);
+      if (!chordRoleByPc.has(pc)) {
+        chordRoleByPc.set(pc, t.role);
+        chordDegreeByPc.set(pc, t.degree);
+      }
+    }
+  }
 
   return function evaluate(pc: number): NoteHighlight | null {
     const idx = pcToIndex.get(pc);
@@ -94,6 +112,27 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
 
       if (!inScale) return null;
       return { role: pc === rootPc ? 'root' : 'scale', label: labelFor() };
+    }
+
+    // Chord view: highlight the active chord's tones by role, labelled by their
+    // chord-relative degree. Chord tones outside the current key get a dashed
+    // ring; remaining key tones can show faintly as ghosts.
+    if (viewMode === 'chord') {
+      const role = chordRoleByPc.get(pc);
+      if (role) {
+        const label =
+          displayMode === 'note'
+            ? noteName(mod(pc + shift, 12))
+            : chordDegreeByPc.get(pc) ?? '';
+        return {
+          role,
+          label,
+          ring: !!activeChord && pc === activeChord.rootPc,
+          outside: !inScale,
+        };
+      }
+      if (inScale && ghostScale) return { role: 'ghost', label: '' };
+      return null;
     }
 
     // Triad view
