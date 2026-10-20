@@ -215,3 +215,85 @@ export function chordToMidi(rootPc: number, intervalsFromRoot: number[], octave:
   const rootMidi = (octave + 1) * 12 + rootPc;
   return intervalsFromRoot.map((i) => rootMidi + i);
 }
+
+export interface MidiFileOptions {
+  bpm?: number; // quarter-note tempo written into the file
+  beatsPerChord?: number; // how long each chord lasts, in beats
+  ticksPerBeat?: number; // division / PPQ (default 480)
+  velocity?: number; // 1-127 (default 95)
+  gate?: number; // fraction of each chord's length the notes sound, 0-1 (default 0.95)
+  trackName?: string;
+}
+
+/**
+ * Encode a chord progression as a Standard MIDI File (format 0) and return the
+ * raw bytes, ready to wrap in a Blob for download. Each entry in `chords` is one
+ * chord's MIDI note numbers (e.g. from chordToMidi); chords play back-to-back,
+ * each lasting `beatsPerChord` beats. Pure data — no Web MIDI, no dependencies,
+ * so it works even where MIDI output is unavailable.
+ */
+export function progressionToSmf(chords: number[][], opts: MidiFileOptions = {}): Uint8Array<ArrayBuffer> {
+  const ppq = Math.max(24, Math.round(opts.ticksPerBeat ?? 480));
+  const bpm = Math.max(1, opts.bpm ?? 120);
+  const beats = Math.max(0.25, opts.beatsPerChord ?? 2);
+  const vel = Math.max(1, Math.min(127, Math.round(opts.velocity ?? 95)));
+  const gate = Math.max(0.1, Math.min(1, opts.gate ?? 0.95));
+  const chordTicks = Math.max(1, Math.round(ppq * beats));
+  const onTicks = Math.max(1, Math.round(chordTicks * gate));
+  const restTicks = Math.max(0, chordTicks - onTicks); // gap between chords
+
+  // MIDI delta times are variable-length quantities: 7 bits per byte, big-endian,
+  // with the high bit set on every byte except the last.
+  const vlq = (value: number): number[] => {
+    let v = Math.max(0, Math.floor(value));
+    const out = [v & 0x7f];
+    v = Math.floor(v / 128);
+    while (v > 0) {
+      out.unshift((v & 0x7f) | 0x80);
+      v = Math.floor(v / 128);
+    }
+    return out;
+  };
+  const u16 = (n: number): number[] => [(n >> 8) & 0xff, n & 0xff];
+  const u32 = (n: number): number[] => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+  const ascii = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0) & 0x7f);
+
+  const track: number[] = [];
+  const push = (...bytes: number[]) => track.push(...bytes);
+  const ch = 0; // channel 1
+
+  // --- Meta events, all at delta 0 at the head of the track ---
+  if (opts.trackName) {
+    const name = ascii(opts.trackName).slice(0, 127);
+    push(0x00, 0xff, 0x03, ...vlq(name.length), ...name);
+  }
+  push(0x00, 0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08); // time signature 4/4
+  const mpq = Math.round(60000000 / bpm); // microseconds per quarter note
+  push(0x00, 0xff, 0x51, 0x03, (mpq >> 16) & 0xff, (mpq >> 8) & 0xff, mpq & 0xff); // set tempo
+  push(0x00, 0xc0 | ch, 0x00); // program change -> Acoustic Grand Piano
+
+  // --- Chord events ---
+  let lead = 0; // ticks to wait before the next chord's first note-on
+  for (const raw of chords) {
+    const notes = raw
+      .filter((n) => Number.isFinite(n))
+      .map((n) => Math.max(0, Math.min(127, Math.round(n))));
+    if (notes.length === 0) {
+      lead += chordTicks; // preserve timing for an empty slot
+      continue;
+    }
+    push(...vlq(lead), 0x90 | ch, notes[0], vel); // first note-on after the lead gap
+    for (let k = 1; k < notes.length; k++) push(0x00, 0x90 | ch, notes[k], vel);
+    push(...vlq(onTicks), 0x80 | ch, notes[0], 0); // note-offs after the sounding portion
+    for (let k = 1; k < notes.length; k++) push(0x00, 0x80 | ch, notes[k], 0);
+    lead = restTicks; // carry the gap to the next chord
+  }
+  push(0x00, 0xff, 0x2f, 0x00); // end of track
+
+  const header = [...ascii('MThd'), ...u32(6), ...u16(0), ...u16(1), ...u16(ppq)];
+  const chunk = [...ascii('MTrk'), ...u32(track.length), ...track];
+  const out = new Uint8Array(header.length + chunk.length);
+  out.set(header, 0);
+  out.set(chunk, header.length);
+  return out;
+}

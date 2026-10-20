@@ -10,7 +10,7 @@ import {
 } from '../music/chords';
 import type { Chord, ChordQuality } from '../music/chords';
 import { PROGRESSION_TEMPLATES, generateProgression, getTemplate } from '../music/progression';
-import { chordToMidi, midiEngine } from '../audio/midi';
+import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { mod, noteName } from '../music/notes';
 
 interface Props {
@@ -167,6 +167,27 @@ export function ProgressionControls(props: Props) {
       }
       fire(i);
     }, dur);
+  };
+
+  // Export the progression as a downloadable Standard MIDI File. Independent of
+  // Web MIDI output, so this works even where "Hear"/"Play" are unavailable.
+  const exportMidi = () => {
+    if (progression.length === 0) return;
+    const keyLabel = noteName(mod(rootPc + shift, 12));
+    const bytes = progressionToSmf(progression.map(voice), {
+      bpm: tempo,
+      beatsPerChord,
+      trackName: `Fretboard progression in ${keyLabel}`,
+    });
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/midi' }));
+    const safeKey = keyLabel.replace('\u266f', 'sharp').replace('\u266d', 'flat');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fretboard-${safeKey}-progression.mid`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -331,6 +352,14 @@ export function ProgressionControls(props: Props) {
         </button>
         <button className="btn-mini" onClick={clearProg} disabled={progression.length === 0}>
           Clear
+        </button>
+        <button
+          className="btn-mini"
+          onClick={exportMidi}
+          disabled={progression.length === 0}
+          title="Download this progression as a .mid file (works without MIDI output)"
+        >
+          &#x2913; Export .mid
         </button>
         <span className="midi-sep" />
         <label className="checkbox-row">
