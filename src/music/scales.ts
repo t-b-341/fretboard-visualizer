@@ -3,7 +3,7 @@
 
 import { mod } from './notes';
 
-export type FamilyKey = 'major' | 'melodicMinor' | 'harmonicMinor';
+export type FamilyKey = 'major' | 'melodicMinor' | 'harmonicMinor' | 'harmonicMajor';
 
 export interface ModeDef {
   /** Stable internal key, e.g. "Dorian". */
@@ -58,6 +58,20 @@ export const SCALE_FAMILIES: FamilyDef[] = [
       { key: 'PhrygianDominant', name: 'Phrygian Dominant', intervals: [0, 1, 4, 5, 7, 8, 10] },
       { key: 'LydianSharp2', name: 'Lydian \u266f2', intervals: [0, 3, 4, 6, 7, 9, 11] },
       { key: 'Ultralocrian', name: 'Ultralocrian (Altered bb7)', intervals: [0, 1, 3, 4, 6, 8, 9] },
+    ],
+  },
+  {
+    key: 'harmonicMajor',
+    name: 'Harmonic Major',
+    // Major scale with a lowered 6th: 1 2 3 4 5 b6 7.
+    modes: [
+      { key: 'HarmonicMajor', name: 'Harmonic Major', intervals: [0, 2, 4, 5, 7, 8, 11] },
+      { key: 'Dorianb5', name: 'Dorian b5', intervals: [0, 2, 3, 5, 6, 9, 10] },
+      { key: 'Phrygianb4', name: 'Phrygian b4', intervals: [0, 1, 3, 4, 7, 8, 10] },
+      { key: 'Lydianb3', name: 'Lydian b3 (Lydian Diminished)', intervals: [0, 2, 3, 6, 7, 9, 11] },
+      { key: 'Mixolydianb2', name: 'Mixolydian b2', intervals: [0, 1, 4, 5, 7, 9, 10] },
+      { key: 'LydianAugmentedSharp2', name: 'Lydian Augmented \u266f2', intervals: [0, 3, 4, 6, 8, 9, 11] },
+      { key: 'Locrianbb7', name: 'Locrian bb7 (Diminished)', intervals: [0, 1, 3, 5, 6, 8, 9] },
     ],
   },
 ];
