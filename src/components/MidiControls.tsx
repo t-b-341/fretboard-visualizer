@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import './MidiControls.css';
 import type { Triad } from '../music/chords';
 import { midiEngine, scaleToMidi, triadToMidi } from '../audio/midi';
+import { player } from '../audio/player';
+import { synth } from '../audio/synth';
 
 interface Props {
   rootPc: number;
@@ -18,10 +20,11 @@ export function MidiControls({ rootPc, intervals, triad }: Props) {
   const [octave, setOctave] = useState(4);
   const [bpm, setBpm] = useState(120);
 
-  // Re-render when the engine's device list / selection changes.
+  // Re-render when the MIDI device list / selection or synth settings change.
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
+  useEffect(() => synth.subscribe(() => setTick((t) => t + 1)), []);
   // Silence anything playing if this panel unmounts.
-  useEffect(() => () => midiEngine.stop(), []);
+  useEffect(() => () => player.stop(), []);
 
   const enable = async () => {
     if (!midiEngine.supported) {
@@ -36,28 +39,88 @@ export function MidiControls({ rootPc, intervals, triad }: Props) {
   const outputs = midiEngine.outputs();
   const ready = status === 'ready';
   const hasOutput = ready && !!midiEngine.outputId && outputs.length > 0;
+  // Playback works through the built-in synth even with no MIDI device.
+  const soundReady = synth.supported || hasOutput;
 
-  const playScale = () => midiEngine.playSequence(scaleToMidi(rootPc, intervals, octave), { bpm });
-  const playChord = () => midiEngine.playChord(triadToMidi(triad.pitches, octave));
+  const playScale = () => player.playSequence(scaleToMidi(rootPc, intervals, octave), { bpm });
+  const playChord = () => player.playChord(triadToMidi(triad.pitches, octave));
 
   return (
     <div className="midi-bar">
-      <span className="midi-bar-label">Sound (MIDI out)</span>
+      <span className="midi-bar-label">Sound</span>
 
+      {/* Built-in synth: makes sound with no setup */}
+      <button
+        className={`btn-mini${synth.muted ? ' active' : ''}`}
+        onClick={() => synth.setMuted(!synth.muted)}
+        disabled={!synth.supported}
+        title={synth.muted ? 'Unmute the built-in synth' : 'Mute the built-in synth'}
+      >
+        {synth.muted ? 'Muted' : 'Mute'}
+      </button>
+      <label className="midi-field">
+        Volume
+        <input
+          className="midi-range"
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(synth.volume * 100)}
+          disabled={!synth.supported || synth.muted}
+          onChange={(e) => synth.setVolume(Number(e.target.value) / 100)}
+        />
+      </label>
+
+      <label className="midi-field">
+        Octave
+        <select value={octave} onChange={(e) => setOctave(Number(e.target.value))}>
+          {[2, 3, 4, 5, 6].map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="midi-field">
+        Tempo
+        <input
+          type="number"
+          min={40}
+          max={240}
+          value={bpm}
+          onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
+        />
+      </label>
+
+      <span className="midi-sep" />
+
+      <button className="btn-mini" onClick={playScale} disabled={!soundReady}>
+        &#9654; Play scale
+      </button>
+      <button className="btn-mini" onClick={playChord} disabled={!soundReady}>
+        &#9654; Play chord
+      </button>
+      <button className="btn-mini" onClick={() => player.stop()}>
+        &#9632; Stop
+      </button>
+
+      <span className="midi-sep" />
+
+      {/* Optional: also send notes to an external MIDI device */}
       {!ready && (
         <button className="btn-mini" onClick={enable} disabled={status === 'enabling'}>
-          {status === 'enabling' ? 'Enabling\u2026' : 'Enable MIDI'}
+          {status === 'enabling' ? 'Enabling\u2026' : 'Send to MIDI\u2026'}
         </button>
       )}
       {status === 'unsupported' && (
-        <span className="midi-note muted">
-          Web MIDI isn&rsquo;t available in this browser &mdash; try Chrome or Edge.
-        </span>
+        <span className="midi-note muted">External MIDI needs Chrome or Edge.</span>
       )}
       {status === 'denied' && <span className="midi-note muted">MIDI access was blocked.</span>}
 
       {ready && (
         <>
+          <span className="midi-note muted">MIDI&nbsp;out</span>
           <label className="midi-field">
             Device
             <select
@@ -91,43 +154,9 @@ export function MidiControls({ rootPc, intervals, triad }: Props) {
             </select>
           </label>
 
-          <label className="midi-field">
-            Octave
-            <select value={octave} onChange={(e) => setOctave(Number(e.target.value))}>
-              {[2, 3, 4, 5, 6].map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="midi-field">
-            Tempo
-            <input
-              type="number"
-              min={40}
-              max={240}
-              value={bpm}
-              onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
-            />
-          </label>
-
-          <span className="midi-sep" />
-
-          <button className="btn-mini" onClick={playScale} disabled={!hasOutput}>
-            &#9654; Play scale
-          </button>
-          <button className="btn-mini" onClick={playChord} disabled={!hasOutput}>
-            &#9654; Play chord
-          </button>
-          <button className="btn-mini" onClick={() => midiEngine.stop()} disabled={!hasOutput}>
-            &#9632; Stop
-          </button>
-
           {outputs.length === 0 && (
             <span className="midi-note muted">
-              No MIDI outputs found &mdash; connect a device or enable a virtual/OS synth.
+              No MIDI devices found &mdash; the built-in synth is still playing.
             </span>
           )}
         </>

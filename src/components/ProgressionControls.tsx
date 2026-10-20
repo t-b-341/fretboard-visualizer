@@ -11,6 +11,8 @@ import {
 import type { Chord, ChordQuality } from '../music/chords';
 import { PROGRESSION_TEMPLATES, generateProgression, getTemplate } from '../music/progression';
 import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
+import { player } from '../audio/player';
+import { synth } from '../audio/synth';
 import { mod, noteName } from '../music/notes';
 
 interface Props {
@@ -80,7 +82,7 @@ export function ProgressionControls(props: Props) {
   const stop = () => {
     stopTimer();
     setPlaying(false);
-    midiEngine.stop();
+    player.stop();
   };
 
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
@@ -91,6 +93,8 @@ export function ProgressionControls(props: Props) {
   }, [active]);
 
   const midiReady = midiEngine.enabled && !!midiEngine.outputId;
+  // The built-in synth makes sound on its own; MIDI output is optional extra.
+  const soundReady = synth.supported || midiReady;
 
   const noteOptions = Array.from({ length: 12 }, (_, d) => ({
     concertPc: mod(d - shift, 12),
@@ -102,7 +106,7 @@ export function ProgressionControls(props: Props) {
   const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
-  const hear = (chord: Chord, durationMs = 1000) => midiEngine.playChord(voice(chord), { durationMs });
+  const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
   const preview = (chord: Chord) => {
     onShowChord(chord);
     hear(chord);
@@ -150,7 +154,7 @@ export function ProgressionControls(props: Props) {
     const fire = (idx: number) => {
       setPlayIndex(idx);
       onShowChord(chords[idx]);
-      midiEngine.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
+      player.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
     };
     setPlaying(true);
     fire(0);
@@ -196,7 +200,7 @@ export function ProgressionControls(props: Props) {
         <span className="midi-bar-label">Chords &amp; progressions</span>
         <span className="prog-key muted">Key centre: {noteName(mod(rootPc + shift, 12))}</span>
         {!active && <span className="midi-note muted">Shows in the &ldquo;Chords&rdquo; view.</span>}
-        {!midiReady && <span className="midi-note muted">Enable MIDI above to hear it.</span>}
+        {!soundReady && <span className="midi-note muted">Sound isn&rsquo;t available in this browser.</span>}
       </div>
 
       {/* Chord builder: any root + any quality, in or out of key */}
@@ -232,7 +236,7 @@ export function ProgressionControls(props: Props) {
         <button className="btn-mini" onClick={() => addChord(builderChord)}>
           Add &rarr;
         </button>
-        <button className="btn-mini" onClick={() => hear(builderChord)} disabled={!midiReady}>
+        <button className="btn-mini" onClick={() => hear(builderChord)} disabled={!soundReady}>
           &#9654; Hear
         </button>
       </div>
