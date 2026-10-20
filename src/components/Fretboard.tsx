@@ -2,8 +2,8 @@ import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
 import type { Triad } from '../music/chords';
 import type { DisplayMode, ViewMode } from '../App';
-import { chromaticDegreeLabel, mod, noteName } from '../music/notes';
-import { scaleDegreeLabel } from '../music/scales';
+import { mod, noteName } from '../music/notes';
+import { createEvaluator } from '../music/highlight';
 
 interface Props {
   grid: Cell[][];
@@ -36,8 +36,6 @@ const NUT_X = 92;
 const RIGHT_PAD = 24;
 const R = 13;
 
-type Role = 'root' | 'third' | 'fifth' | 'scale' | 'ghost' | 'shared' | 'primaryOnly' | 'overlayOnly';
-
 export function Fretboard(props: Props) {
   const {
     grid,
@@ -68,69 +66,20 @@ export function Fretboard(props: Props) {
   const noteX = (fret: number) => (fret === 0 ? OPEN_X : NUT_X + (fret - 0.5) * FRET_W);
   const fretLineX = (f: number) => NUT_X + f * FRET_W;
 
-  function evaluate(pc: number): { role: Role; label: string; ring?: boolean; outside?: boolean } | null {
-    const idx = pcToIndex.get(pc);
-    const inScale = idx !== undefined;
-
-    const labelFor = (): string =>
-      displayMode === 'note'
-        ? noteName(mod(pc + shift, 12))
-        : scaleDegreeLabel(intervals, idx as number);
-
-    if (viewMode === 'scale') {
-      // Comparison / overlay mode: colour by set membership, label overlay-only
-      // tones by their chromatic degree relative to the primary root.
-      if (compareEnabled) {
-        const inCompare = comparePcSet.has(pc);
-        if (!inScale && !inCompare) return null;
-        if (sharedOnly && !(inScale && inCompare)) return null;
-        const role: Role = inScale && inCompare ? 'shared' : inScale ? 'primaryOnly' : 'overlayOnly';
-        const ring = pc === rootPc || pc === compareRootPc;
-        const label =
-          displayMode === 'note'
-            ? noteName(mod(pc + shift, 12))
-            : inScale
-              ? scaleDegreeLabel(intervals, idx as number)
-              : chromaticDegreeLabel(mod(pc - rootPc, 12));
-        return { role, label, ring };
-      }
-
-      if (!inScale) return null;
-      return { role: pc === rootPc ? 'root' : 'scale', label: labelFor() };
-    }
-
-    // Triad view
-    let chordRole: Role | null = null;
-    if (pc === triad.pitches[0]) chordRole = 'root';
-    else if (pc === triad.pitches[1]) chordRole = 'third';
-    else if (pc === triad.pitches[2]) chordRole = 'fifth';
-
-    // Compare: overlay a scale on the chord. Chord tones keep their colours; the
-    // scale's remaining notes show as colour tones. Everything is labelled
-    // relative to the chord root, and chord tones that fall outside the overlaid
-    // scale get a dashed ring to flag the clash.
-    if (compareEnabled) {
-      const inOverlay = comparePcSet.has(pc);
-      const label =
-        displayMode === 'note'
-          ? noteName(mod(pc + shift, 12))
-          : chromaticDegreeLabel(mod(pc - triad.rootPc, 12));
-      if (chordRole) {
-        if (sharedOnly && !inOverlay) return null;
-        return { role: chordRole, label, ring: pc === compareRootPc, outside: !inOverlay };
-      }
-      if (inOverlay && !sharedOnly) {
-        // Non-chord scale notes = colour/tension tones. Use the blue "scale"
-        // colour so the red/green/gold chord tones stay visually distinct.
-        return { role: 'scale', label, ring: pc === compareRootPc };
-      }
-      return null;
-    }
-
-    if (chordRole) return { role: chordRole, label: labelFor() };
-    if (inScale && ghostScale) return { role: 'ghost', label: '' };
-    return null;
-  }
+  const evaluate = createEvaluator({
+    rootPc,
+    intervals,
+    pcToIndex,
+    viewMode,
+    triad,
+    displayMode,
+    shift,
+    ghostScale,
+    compareEnabled,
+    comparePcSet,
+    compareRootPc,
+    sharedOnly,
+  });
 
   return (
     <div className="fretboard-wrap">

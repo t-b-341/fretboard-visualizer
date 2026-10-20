@@ -234,6 +234,36 @@ export function Controls(props: Props) {
       <div className="control-group">
         <span className="group-label">Display</span>
         <div className="field">
+          <label>Show on</label>
+          <div className="segmented" role="group" aria-label="Instrument view">
+            {(['fretboard', 'keyboard', 'both'] as const).map((v) => (
+              <button
+                key={v}
+                className={state.instrumentView === v ? 'active' : ''}
+                onClick={() => onUpdate({ instrumentView: v })}
+              >
+                {v === 'fretboard' ? 'Fretboard' : v === 'keyboard' ? 'Keyboard' : 'Both'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {state.instrumentView !== 'fretboard' && (
+          <div className="field">
+            <label>Keyboard octaves</label>
+            <div className="segmented" role="group" aria-label="Keyboard octaves">
+              {[1, 2].map((n) => (
+                <button
+                  key={n}
+                  className={state.keyboardOctaves === n ? 'active' : ''}
+                  onClick={() => onUpdate({ keyboardOctaves: n as 1 | 2 })}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="field">
           <label>View</label>
           <div className="segmented" role="group" aria-label="View mode">
             <button

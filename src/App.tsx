@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import './App.css';
 import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
+import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
 import { getFamily, getScaleNotes } from './music/scales';
 import type { FamilyKey } from './music/scales';
@@ -15,6 +16,7 @@ import { labelShift, mod, noteName } from './music/notes';
 export type ViewMode = 'scale' | 'triad';
 export type LabelMode = 'concert' | 'standard';
 export type DisplayMode = 'note' | 'degree';
+export type InstrumentView = 'fretboard' | 'keyboard' | 'both';
 
 export interface AppState {
   numStrings: 6 | 7 | 8;
@@ -28,6 +30,8 @@ export interface AppState {
   triadDegree: number;
   labelMode: LabelMode;
   displayMode: DisplayMode;
+  instrumentView: InstrumentView;
+  keyboardOctaves: 1 | 2;
   ghostScale: boolean;
   compareEnabled: boolean;
   compareRootPc: number;
@@ -50,6 +54,8 @@ function createInitialState(): AppState {
     triadDegree: 0,
     labelMode: 'concert',
     displayMode: 'note',
+    instrumentView: 'both',
+    keyboardOctaves: 2,
     ghostScale: true,
     compareEnabled: false,
     compareRootPc: 10,
@@ -191,7 +197,7 @@ export default function App() {
       <header className="app-header">
         <h1>Fretboard Visualizer</h1>
         <p className="subtitle">
-          6-string bass &amp; 7/8-string guitar &middot; scales, modes &amp; diatonic triads
+          6-string bass, 7/8-string guitar &amp; keyboard &middot; scales, modes &amp; diatonic triads
         </p>
       </header>
 
@@ -212,23 +218,44 @@ export default function App() {
         onComparePreset={handleComparePreset}
       />
 
-      <Fretboard
-        grid={grid}
-        tuning={state.tuning}
-        fretCount={state.fretCount}
-        rootPc={state.rootPc}
-        intervals={intervals}
-        pcToIndex={pcToIndex}
-        viewMode={state.viewMode}
-        triad={triad}
-        displayMode={state.displayMode}
-        shift={shift}
-        ghostScale={state.ghostScale}
-        compareEnabled={state.compareEnabled}
-        comparePcSet={comparePcSet}
-        compareRootPc={state.compareRootPc}
-        sharedOnly={state.sharedOnly}
-      />
+      <div className="instrument-views">
+        {(state.instrumentView === 'fretboard' || state.instrumentView === 'both') && (
+          <Fretboard
+            grid={grid}
+            tuning={state.tuning}
+            fretCount={state.fretCount}
+            rootPc={state.rootPc}
+            intervals={intervals}
+            pcToIndex={pcToIndex}
+            viewMode={state.viewMode}
+            triad={triad}
+            displayMode={state.displayMode}
+            shift={shift}
+            ghostScale={state.ghostScale}
+            compareEnabled={state.compareEnabled}
+            comparePcSet={comparePcSet}
+            compareRootPc={state.compareRootPc}
+            sharedOnly={state.sharedOnly}
+          />
+        )}
+        {(state.instrumentView === 'keyboard' || state.instrumentView === 'both') && (
+          <Keyboard
+            octaves={state.keyboardOctaves}
+            rootPc={state.rootPc}
+            intervals={intervals}
+            pcToIndex={pcToIndex}
+            viewMode={state.viewMode}
+            triad={triad}
+            displayMode={state.displayMode}
+            shift={shift}
+            ghostScale={state.ghostScale}
+            compareEnabled={state.compareEnabled}
+            comparePcSet={comparePcSet}
+            compareRootPc={state.compareRootPc}
+            sharedOnly={state.sharedOnly}
+          />
+        )}
+      </div>
 
       <Legend
         viewMode={state.viewMode}

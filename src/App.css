@@ -125,6 +125,13 @@ input:focus {
   color: var(--muted);
 }
 
+/* Instrument views (stacked when both are shown) */
+.instrument-views {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 /* Fretboard */
 .fretboard-wrap {
   overflow-x: auto;
@@ -135,6 +142,28 @@ input:focus {
 }
 .fretboard {
   display: block;
+}
+
+/* Keyboard */
+.keyboard-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.keyboard {
+  display: block;
+}
+.pkey-white {
+  fill: #eef2f8;
+  stroke: #243040;
+  stroke-width: 1;
+}
+.pkey-black {
+  fill: #10151c;
+  stroke: #000;
+  stroke-width: 1.5;
 }
 
 .board {
