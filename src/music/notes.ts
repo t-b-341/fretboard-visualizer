@@ -22,6 +22,15 @@ export function noteName(pc: number, preferFlats = true): string {
 }
 
 /**
+ * Scientific name of a MIDI note, using the app's octave numbering
+ * (MIDI 60 → "C4", middle C). Same numbering as the sound-octave control.
+ */
+export function pitchName(midi: number, preferFlats = true): string {
+  const n = Math.max(0, Math.min(127, Math.round(midi)));
+  return `${noteName(n, preferFlats)}${Math.floor(n / 12) - 1}`;
+}
+
+/**
  * Semitones to shift *displayed* note names so a half-step-down fretboard can be
  * read as if it were standard tuning. Concert = 0 (actual sounding pitch),
  * Standard = +1 (names read a half step higher; physical positions unchanged).

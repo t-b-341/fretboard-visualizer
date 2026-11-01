@@ -1,10 +1,12 @@
 import type { Chord, Triad } from '../music/chords';
 import type { DisplayMode, ViewMode } from '../App';
-import { createEvaluator } from '../music/highlight';
+import { createEvaluator, noteFillClass, noteTextClass, type NoteHighlight } from '../music/highlight';
+import { guideForWindow, keyboardWindow } from '../music/keys';
+import { pitchName } from '../music/notes';
 
 interface Props {
-  /** How many octaves of keys to draw (1 or 2). A trailing C is always added. */
-  octaves: number;
+  /** How many octaves of keys to draw. 3 is a 37-key controller (C to C). */
+  octaves: 1 | 2 | 3;
   rootPc: number;
   intervals: number[];
   pcToIndex: Map<number, number>;
@@ -18,6 +20,17 @@ interface Props {
   comparePcSet: Set<number>;
   compareRootPc: number;
   sharedOnly: boolean;
+  /** Pitch classes to keep. Null shows the usual highlighting. */
+  restrictPcs: Set<number> | null;
+  colorByDegree: boolean;
+  clickToHear: boolean;
+  /** Spelled note names keyed by displayed pitch class. */
+  spelling?: ReadonlyMap<number, string> | null;
+  /** Pitch classes of this chord's guide tones, when that overlay is on. */
+  guidePcs?: Set<number> | null;
+  /** MIDI note of the lowest C. Octave 4 → 60, the same numbering as the sound bar. */
+  lowestMidi: number;
+  onPlay: (midi: number) => void;
 }
 
 const WHITE_W = 40;
@@ -26,8 +39,9 @@ const BLACK_W = 25;
 const BLACK_H = 116;
 const PAD_X = 14;
 const PAD_TOP = 14;
-const PAD_BOTTOM = 14;
+const PAD_BOTTOM = 28;
 const R = 13;
+const WHITE_LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
 // Pitch classes of the white keys within one octave: C D E F G A B.
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
@@ -42,8 +56,17 @@ const BLACK_KEYS = [
 ];
 
 export function Keyboard(props: Props) {
-  const { octaves } = props;
+  const { octaves, colorByDegree, clickToHear, lowestMidi, onPlay, viewMode, compareEnabled, guidePcs } = props;
   const evaluate = createEvaluator(props);
+  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
+  const play = (midi: number) => {
+    if (clickToHear) onPlay(midi);
+  };
+  const keyWindow = keyboardWindow(octaves, lowestMidi);
+  const guideByMidi = new Map(
+    guideForWindow(evaluate, keyWindow).map((note) => [note.midi, note.highlight]),
+  );
+  const midiFor = (octaveOffset: number, pc: number) => lowestMidi + octaveOffset * 12 + pc;
 
   // Full octaves of 7 white keys, plus a trailing C to close the top octave.
   const whiteCount = 7 * octaves + 1;
@@ -58,10 +81,15 @@ export function Keyboard(props: Props) {
     x: whiteX(i),
   }));
 
-  const blackKeys: { key: string; pc: number; x: number }[] = [];
+  const blackKeys: { key: string; pc: number; octave: number; x: number }[] = [];
   for (let o = 0; o < octaves; o++) {
     for (const b of BLACK_KEYS) {
-      blackKeys.push({ key: `b-${o}-${b.pc}`, pc: b.pc, x: whiteX(o * 7 + b.pos) - BLACK_W / 2 });
+      blackKeys.push({
+        key: `b-${o}-${b.pc}`,
+        pc: b.pc,
+        octave: o,
+        x: whiteX(o * 7 + b.pos) - BLACK_W / 2,
+      });
     }
   }
 
@@ -69,19 +97,20 @@ export function Keyboard(props: Props) {
   const whiteDotY = PAD_TOP + WHITE_H - 26;
   const blackDotY = PAD_TOP + BLACK_H - 22;
 
-  const renderDot = (key: string, cx: number, cy: number, pc: number) => {
-    const ev = evaluate(pc);
+  const renderDot = (key: string, cx: number, cy: number, midi: number) => {
+    const ev: NoteHighlight | undefined = guideByMidi.get(midi);
     if (!ev) return null;
     if (ev.role === 'ghost') {
       return <circle key={key} className="note-ghost" cx={cx} cy={cy} r={4.5} />;
     }
     return (
-      <g key={key}>
-        <circle className={`note note-${ev.role}`} cx={cx} cy={cy} r={R} />
+      <g key={key} className="key-dot">
+        <circle className={noteFillClass(ev, degreeColors)} cx={cx} cy={cy} r={R} />
         {ev.ring && <circle className="note-root-ring" cx={cx} cy={cy} r={R + 3} />}
+        {guidePcs?.has(midi % 12) && <circle className="note-guide-ring" cx={cx} cy={cy} r={R + 4} />}
         {ev.outside && <circle className="note-outside-ring" cx={cx} cy={cy} r={R + 3} />}
         <text
-          className={`note-label note-label-${ev.role}`}
+          className={noteTextClass(ev, degreeColors)}
           x={cx}
           y={cy}
           textAnchor="middle"
@@ -93,15 +122,20 @@ export function Keyboard(props: Props) {
     );
   };
 
+  const rangeLabel = `${pitchName(keyWindow.lowest)}–${pitchName(keyWindow.lowest + keyWindow.keyCount - 1)}`;
+
   return (
     <div className="keyboard-wrap">
+      {keyWindow.keyCount === 37 && (
+        <p className="keyboard-caption">37 keys · {rangeLabel}</p>
+      )}
       <svg
-        className="keyboard"
+        className={clickToHear ? 'keyboard keys-live' : 'keyboard'}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="Keyboard diagram"
+        role="group"
+        aria-label={keyWindow.keyCount === 37 ? `37-key keyboard, ${rangeLabel}` : 'Keyboard diagram'}
       >
         {/* White keys */}
         {whiteKeys.map((k) => (
@@ -113,6 +147,7 @@ export function Keyboard(props: Props) {
             width={WHITE_W}
             height={WHITE_H}
             rx={5}
+            onClick={() => play(midiFor(Math.floor(k.i / 7), k.pc))}
           />
         ))}
 
@@ -126,12 +161,34 @@ export function Keyboard(props: Props) {
             width={BLACK_W}
             height={BLACK_H}
             rx={4}
+            onClick={() => play(midiFor(k.octave, k.pc))}
           />
         ))}
 
-        {/* Note markers */}
-        {whiteKeys.map((k) => renderDot(`wd-${k.i}`, k.x + WHITE_W / 2, whiteDotY, k.pc))}
-        {blackKeys.map((k) => renderDot(`${k.key}-dot`, k.x + BLACK_W / 2, blackDotY, k.pc))}
+        {/* Note markers — taken from the guide for this key window */}
+        {whiteKeys.map((k) =>
+          renderDot(`wd-${k.i}`, k.x + WHITE_W / 2, whiteDotY, midiFor(Math.floor(k.i / 7), k.pc)),
+        )}
+        {blackKeys.map((k) =>
+          renderDot(`${k.key}-dot`, k.x + BLACK_W / 2, blackDotY, midiFor(k.octave, k.pc)),
+        )}
+
+        {/* Pitch of each white key, the way fret numbers mark the neck. C carries its octave. */}
+        {whiteKeys.map((k) => {
+          const midi = midiFor(Math.floor(k.i / 7), k.pc);
+          const letter = WHITE_LETTERS[k.i % 7];
+          return (
+            <text
+              key={`kn-${k.i}`}
+              className="fret-number"
+              x={k.x + WHITE_W / 2}
+              y={PAD_TOP + WHITE_H + 16}
+              textAnchor="middle"
+            >
+              {k.pc === 0 ? pitchName(midi) : letter}
+            </text>
+          );
+        })}
       </svg>
     </div>
   );

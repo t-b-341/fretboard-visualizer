@@ -6,11 +6,12 @@
 import { buildChord, buildDiatonicChord } from './chords';
 import type { Chord, ChordQuality } from './chords';
 import { mod } from './notes';
+import { parentIntervals } from './scales';
 
 export interface KeyContext {
   /** Key centre (concert pitch class). */
   rootPc: number;
-  /** Current scale intervals (length 7). */
+  /** Current scale intervals. Templates use the heptatonic parent when this is not 7 notes. */
   intervals: number[];
 }
 
@@ -24,7 +25,7 @@ export interface ProgressionTemplate {
 
 // Compact step helpers.
 const deg = (c: KeyContext, degree: number, seventh = false): Chord =>
-  buildDiatonicChord(c.rootPc, c.intervals, degree, seventh);
+  buildDiatonicChord(c.rootPc, parentIntervals(c.intervals), degree, seventh);
 const abs = (c: KeyContext, semisFromKey: number, quality: ChordQuality): Chord =>
   buildChord(mod(c.rootPc + semisFromKey, 12), quality);
 
@@ -136,8 +137,9 @@ export function generateProgression(ctx: KeyContext, opts: GenerateOptions = {})
   for (let i = 1; i < length - 1; i++) fns.push(weightedPick(transitions[fns[i - 1]], rnd));
   if (length > 1) fns.push('T'); // resolve home
 
+  const diatonic = parentIntervals(ctx.intervals);
   const chords: Chord[] = fns.map((f) =>
-    buildDiatonicChord(ctx.rootPc, ctx.intervals, pick(groups[f], rnd), sevenths),
+    buildDiatonicChord(ctx.rootPc, diatonic, pick(groups[f], rnd), sevenths),
   );
 
   // Recolour interior chords for out-of-key motion.

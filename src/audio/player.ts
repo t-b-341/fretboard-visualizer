@@ -23,4 +23,13 @@ export const player = {
     synth.stop();
     midiEngine.stop();
   },
+  /** Sustain the root. Independent of stop(), so a scale can play over it. */
+  startDrone(midi: number) {
+    synth.startDrone(midi);
+    midiEngine.startDrone(midi);
+  },
+  stopDrone() {
+    synth.stopDrone();
+    midiEngine.stopDrone();
+  },
 };

@@ -1,9 +1,14 @@
 import type { AppState } from '../App';
 import type { FamilyDef, FamilyKey, ModeDef } from '../music/scales';
-import { SCALE_FAMILIES } from '../music/scales';
+import { SCALE_FAMILIES, parentScale } from '../music/scales';
 import { getAllDiatonicTriads, qualitySuffix } from '../music/chords';
 import { TUNING_PRESETS } from '../music/tunings';
-import { mod, noteName } from '../music/notes';
+import { CONTROLLER_BASE_OCTAVES, clampControllerShift, controllerWindow, shiftLimits } from '../music/keys';
+import type { ControllerBaseOctave } from '../music/keys';
+import { mod, noteName, pitchName } from '../music/notes';
+import type { NeckShape, ShapeMode } from '../music/shapes';
+import { notesPerString } from '../music/shapes';
+import { voicingStringSets } from '../music/voicings';
 
 interface Props {
   state: AppState;
@@ -20,6 +25,11 @@ interface Props {
   onToggleCompare: (enabled: boolean) => void;
   onCompareFamily: (familyKey: FamilyKey) => void;
   onComparePreset: (kind: 'parallel' | 'relative') => void;
+  npsShapes: NeckShape[];
+  cagedShapes: NeckShape[];
+  /** How many tones the current voicing can use (3 for a triad, 4 when a 7th is available). */
+  voicingToneCount: number;
+  onShape: (mode: ShapeMode, index: number) => void;
 }
 
 export function Controls(props: Props) {
@@ -38,7 +48,17 @@ export function Controls(props: Props) {
     onToggleCompare,
     onCompareFamily,
     onComparePreset,
+    npsShapes,
+    cagedShapes,
+    voicingToneCount,
+    onShape,
   } = props;
+
+  const controllerRange = controllerWindow(state.controllerBaseOctave, state.controllerOctaveShift);
+  const controllerLimits = shiftLimits(state.controllerBaseOctave);
+  const controllerSpan = `${pitchName(controllerRange.lowest)}–${pitchName(controllerRange.lowest + controllerRange.keyCount - 1)}`;
+  const shiftLabel =
+    state.controllerOctaveShift > 0 ? `+${state.controllerOctaveShift}` : String(state.controllerOctaveShift);
 
   // Note options in the current displayed label space. `value` is the concert
   // pitch class, `label` is the displayed name (shifted in Standard mode).
@@ -47,7 +67,9 @@ export function Controls(props: Props) {
     label: noteName(d),
   }));
 
-  const triads = getAllDiatonicTriads(state.rootPc, mode.intervals);
+  const diatonic = parentScale(mode.intervals);
+  const parentName = diatonic.name;
+  const triads = getAllDiatonicTriads(state.rootPc, diatonic.intervals);
 
   // Tonality of the thing the overlay presets anchor to: the selected chord in
   // Triad view, otherwise the primary scale. Drives the parallel/relative labels.
@@ -57,6 +79,20 @@ export function Controls(props: Props) {
       : mode.intervals[2] === 4;
   const parallelLabel = anchorIsMajor ? 'Parallel minor' : 'Parallel major';
   const relativeLabel = anchorIsMajor ? 'Relative minor' : 'Relative major';
+
+  const perString = notesPerString(mode.intervals.length);
+  const shapes = state.shapeMode === 'nps' ? npsShapes : state.shapeMode === 'caged' ? cagedShapes : [];
+  const shapeIndex = shapes.length === 0 ? 0 : Math.min(state.shapeIndex, shapes.length - 1);
+  const voicingWidth = state.voicingStyle === 'drop2' ? 4 : state.voicingWidth;
+  const stringSets = voicingStringSets(state.numStrings, voicingWidth);
+  const inversionCount = Math.min(4, Math.max(1, voicingToneCount));
+  const showVoicing = state.viewMode === 'triad' || state.viewMode === 'chord';
+
+  const setHidden = (hidden: number[]) => {
+    const unique = [...new Set(hidden.filter((i) => i >= 0 && i < state.numStrings))];
+    if (unique.length >= state.numStrings) return;
+    onUpdate({ hiddenStrings: unique });
+  };
 
   return (
     <div className="controls">
@@ -111,10 +147,146 @@ export function Controls(props: Props) {
             value={state.fretCount}
             onChange={(e) => {
               const v = Math.max(12, Math.min(24, Number(e.target.value) || 24));
-              onUpdate({ fretCount: v });
+              onUpdate({
+                fretCount: v,
+                fretTo: Math.min(state.fretTo, v),
+                fretFrom: Math.min(state.fretFrom, v),
+              });
             }}
           />
         </div>
+      </div>
+
+      {/* Neck window, strings, and position boxes */}
+      <div className="control-group">
+        <span className="group-label">Neck</span>
+        <div className="field">
+          <label>Hand</label>
+          <div className="segmented" role="group" aria-label="Fretboard handedness">
+            <button
+              className={state.leftHanded ? '' : 'active'}
+              onClick={() => onUpdate({ leftHanded: false })}
+            >
+              Right
+            </button>
+            <button
+              className={state.leftHanded ? 'active' : ''}
+              onClick={() => onUpdate({ leftHanded: true })}
+            >
+              Left
+            </button>
+          </div>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label>From fret</label>
+            <input
+              type="number"
+              min={0}
+              max={state.fretTo}
+              value={state.fretFrom}
+              onChange={(e) => {
+                const v = Math.max(0, Math.min(state.fretTo, Number(e.target.value) || 0));
+                onUpdate({ fretFrom: v });
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>To fret</label>
+            <input
+              type="number"
+              min={state.fretFrom}
+              max={state.fretCount}
+              value={state.fretTo}
+              onChange={(e) => {
+                const v = Math.max(state.fretFrom, Math.min(state.fretCount, Number(e.target.value) || state.fretCount));
+                onUpdate({ fretTo: v });
+              }}
+            />
+          </div>
+        </div>
+        <div className="field">
+          <label>Strings shown</label>
+          <div className="btn-row">
+            <button type="button" className="btn-mini" onClick={() => setHidden([])}>
+              All
+            </button>
+            <button
+              type="button"
+              className="btn-mini"
+              onClick={() => setHidden(state.tuning.map((_, i) => i).filter((i) => i >= 4))}
+            >
+              Low 4
+            </button>
+            <button
+              type="button"
+              className="btn-mini"
+              onClick={() =>
+                setHidden(state.tuning.map((_, i) => i).filter((i) => i < state.numStrings - 4))
+              }
+            >
+              High 4
+            </button>
+          </div>
+          <div className="str-toggles">
+            {state.tuning.map((str, i) => {
+              const on = !state.hiddenStrings.includes(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={on ? 'on' : ''}
+                  title={noteName(mod(str.pc + shift, 12))}
+                  onClick={() => {
+                    if (on) setHidden([...state.hiddenStrings, i]);
+                    else setHidden(state.hiddenStrings.filter((n) => n !== i));
+                  }}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="field">
+          <label>Position</label>
+          <div className="segmented" role="group" aria-label="Position box">
+            <button
+              className={state.shapeMode === 'all' ? 'active' : ''}
+              onClick={() => onShape('all', 0)}
+            >
+              All
+            </button>
+            <button
+              className={state.shapeMode === 'nps' ? 'active' : ''}
+              onClick={() => onShape('nps', shapeIndex)}
+            >
+              {perString}/string
+            </button>
+            <button
+              className={state.shapeMode === 'caged' ? 'active' : ''}
+              onClick={() => onShape('caged', shapeIndex)}
+            >
+              CAGED
+            </button>
+          </div>
+        </div>
+        {state.shapeMode !== 'all' && (
+          <div className="field">
+            <label>{state.shapeMode === 'caged' ? 'Shape' : 'Box'}</label>
+            <select
+              value={shapes.length ? shapeIndex : ''}
+              onChange={(e) => onShape(state.shapeMode, Number(e.target.value))}
+            >
+              {shapes.length === 0 && <option value="">No box in this tuning</option>}
+              {shapes.map((shape, i) => (
+                <option key={shape.id} value={i}>
+                  {shape.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Key & scale */}
@@ -249,19 +421,78 @@ export function Controls(props: Props) {
         </div>
         {state.instrumentView !== 'fretboard' && (
           <div className="field">
-            <label>Keyboard octaves</label>
-            <div className="segmented" role="group" aria-label="Keyboard octaves">
-              {[1, 2].map((n) => (
+            <label>Keyboard</label>
+            <div className="segmented" role="group" aria-label="Keyboard span">
+              {(
+                [
+                  [1, '1 oct'],
+                  [2, '2 oct'],
+                  [3, '37 keys'],
+                ] as const
+              ).map(([n, label]) => (
                 <button
                   key={n}
                   className={state.keyboardOctaves === n ? 'active' : ''}
-                  onClick={() => onUpdate({ keyboardOctaves: n as 1 | 2 })}
+                  title={n === 3 ? 'MPK Mini Plus keybed, C to C. Center octave is C3–C6.' : undefined}
+                  onClick={() => onUpdate({ keyboardOctaves: n, keyboardSpanChosen: true })}
                 >
-                  {n}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
+        )}
+        {state.instrumentView !== 'fretboard' && state.keyboardOctaves === 3 && (
+          <>
+            <div className="field">
+              <label
+                title="Lowest key when both MPK Mini Plus octave buttons are pressed (center). Same numbering as the sound octave: 4 is middle C."
+              >
+                Start key
+              </label>
+              <select
+                value={state.controllerBaseOctave}
+                title="Lowest key when both MPK Mini Plus octave buttons are pressed (center). Same numbering as the sound octave: 4 is middle C."
+                onChange={(e) => {
+                  const controllerBaseOctave = Number(e.target.value) as ControllerBaseOctave;
+                  onUpdate({
+                    controllerBaseOctave,
+                    controllerOctaveShift: clampControllerShift(
+                      controllerBaseOctave,
+                      state.controllerOctaveShift,
+                    ),
+                  });
+                }}
+              >
+                {CONTROLLER_BASE_OCTAVES.map((octave) => (
+                  <option key={octave} value={octave}>
+                    C{octave}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label title="Matches the octave buttons on the controller">Octave</label>
+              <div className="segmented" role="group" aria-label="Controller octave">
+                <button
+                  aria-label="Octave down"
+                  disabled={state.controllerOctaveShift <= controllerLimits.min}
+                  onClick={() => onUpdate({ controllerOctaveShift: state.controllerOctaveShift - 1 })}
+                >
+                  −
+                </button>
+                <span className="segment-value">{shiftLabel}</span>
+                <button
+                  aria-label="Octave up"
+                  disabled={state.controllerOctaveShift >= controllerLimits.max}
+                  onClick={() => onUpdate({ controllerOctaveShift: state.controllerOctaveShift + 1 })}
+                >
+                  +
+                </button>
+              </div>
+              <span className="muted keyboard-range-note">{controllerSpan}</span>
+            </div>
+          </>
         )}
         <div className="field">
           <label>View</label>
@@ -289,7 +520,7 @@ export function Controls(props: Props) {
         {state.viewMode === 'triad' && (
           <>
             <div className="field">
-              <label>Diatonic triad</label>
+              <label>Diatonic triad{parentName ? ` · ${parentName}` : ''}</label>
               <select
                 value={state.triadDegree}
                 onChange={(e) => onUpdate({ triadDegree: Number(e.target.value) })}
@@ -351,7 +582,101 @@ export function Controls(props: Props) {
             </button>
           </div>
         </div>
+        <div className="field">
+          <label>Color</label>
+          <div className="segmented" role="group" aria-label="Note color">
+            <button
+              className={state.colorMode === 'role' ? 'active' : ''}
+              onClick={() => onUpdate({ colorMode: 'role' })}
+            >
+              Role
+            </button>
+            <button
+              className={state.colorMode === 'degree' ? 'active' : ''}
+              onClick={() => onUpdate({ colorMode: 'degree' })}
+            >
+              Degree
+            </button>
+          </div>
+        </div>
       </div>
+
+      {showVoicing && (
+        <div className="control-group">
+          <span className="group-label">Voicing</span>
+          <div className="field">
+            <label>Grip</label>
+            <div className="segmented" role="group" aria-label="Voicing">
+              {(['all', 'close', 'drop2'] as const).map((style) => (
+                <button
+                  key={style}
+                  className={state.voicingStyle === style ? 'active' : ''}
+                  disabled={style === 'drop2' && voicingToneCount < 4}
+                  onClick={() => {
+                    const width = style === 'drop2' ? 4 : state.voicingWidth;
+                    const start = Math.max(0, Math.min(state.voicingSetStart, state.numStrings - width));
+                    onUpdate({ voicingStyle: style, voicingWidth: width as 3 | 4, voicingSetStart: start });
+                  }}
+                >
+                  {style === 'all' ? 'All tones' : style === 'close' ? 'Close' : 'Drop-2'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {state.voicingStyle !== 'all' && (
+            <>
+              <div className="field">
+                <label>Inversion</label>
+                <select
+                  value={Math.min(state.voicingInversion, inversionCount - 1)}
+                  onChange={(e) => onUpdate({ voicingInversion: Number(e.target.value) })}
+                >
+                  {['Root position', '1st inversion', '2nd inversion', '3rd inversion']
+                    .slice(0, inversionCount)
+                    .map((label, i) => (
+                      <option key={label} value={i}>
+                        {label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              {state.voicingStyle === 'close' && (
+                <div className="field">
+                  <label>Strings in the grip</label>
+                  <div className="segmented" role="group" aria-label="Voicing width">
+                    {[3, 4].map((w) => (
+                      <button
+                        key={w}
+                        className={voicingWidth === w ? 'active' : ''}
+                        disabled={w === 4 && voicingToneCount < 4}
+                        onClick={() => {
+                          const start = Math.max(0, Math.min(state.voicingSetStart, state.numStrings - w));
+                          onUpdate({ voicingWidth: w as 3 | 4, voicingSetStart: start });
+                        }}
+                      >
+                        {w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="field">
+                <label>String set</label>
+                <select
+                  value={Math.min(state.voicingSetStart, Math.max(0, stringSets.length - 1))}
+                  onChange={(e) => onUpdate({ voicingSetStart: Number(e.target.value) })}
+                >
+                  {stringSets.map((set) => (
+                    <option key={set.start} value={set.start}>
+                      {set.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
