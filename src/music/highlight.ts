@@ -50,6 +50,8 @@ export interface HighlightContext {
   sharedOnly: boolean;
   /** When set, only these pitch classes are drawn (guide tones or a voicing). */
   restrictPcs?: Set<number> | null;
+  /** MIDI of the lowest picked note. Identify view paints that cell as the root. */
+  identifyBassMidi?: number;
   /**
    * Spelled names keyed by the displayed pitch class (concert pitch plus the
    * label shift). Scale tones first; chord tones the scale doesn't cover fill
@@ -65,7 +67,7 @@ export interface HighlightContext {
  */
 export function createEvaluator(
   ctx: HighlightContext,
-): (pc: number, opts?: { placed?: boolean }) => NoteHighlight | null {
+): (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null {
   const {
     rootPc,
     intervals,
@@ -82,6 +84,7 @@ export function createEvaluator(
     sharedOnly,
     restrictPcs,
     spelling,
+    identifyBassMidi,
   } = ctx;
 
   // Pre-map the active chord's pitch classes to their role and degree label.
@@ -97,7 +100,7 @@ export function createEvaluator(
     }
   }
 
-  return function evaluate(pc: number, opts?: { placed?: boolean }): NoteHighlight | null {
+  return function evaluate(pc: number, opts?: { placed?: boolean; midi?: number }): NoteHighlight | null {
     if (restrictPcs && !restrictPcs.has(pc)) return null;
     const idx = pcToIndex.get(pc);
     const inScale = idx !== undefined;
@@ -112,6 +115,18 @@ export function createEvaluator(
 
     const labelFor = (): string =>
       displayMode === 'note' ? named() : scaleDegreeLabel(intervals, idx as number);
+
+    // Identify: only the notes the player picked are drawn. The lowest one is
+    // the bass (root colour); the rest are scale-coloured. Labels are note names.
+    if (viewMode === 'identify') {
+      if (!opts?.placed) return null;
+      const label = noteName(mod(pc + shift, 12));
+      const role: Role =
+        opts.midi !== undefined && identifyBassMidi !== undefined && opts.midi === identifyBassMidi
+          ? 'root'
+          : 'scale';
+      return { role, label };
+    }
 
     if (viewMode === 'scale') {
       // Comparison / overlay mode: colour by set membership, label overlay-only

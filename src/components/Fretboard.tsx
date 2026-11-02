@@ -52,6 +52,10 @@ interface Props {
    * Every other cell is a ghost scale tone, or nothing.
    */
   activeCells?: Set<string>;
+  /** MIDI of the lowest picked note, so identify view can paint it as the root. */
+  identifyBassMidi?: number;
+  /** Identify view: pick or clear the note at this string and fret. */
+  onPick?: (stringIndex: number, fret: number) => void;
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -97,6 +101,8 @@ export function Fretboard(props: Props) {
     spelling,
     guidePcs,
     activeCells,
+    identifyBassMidi,
+    onPick,
     window: positionWindow,
   } = props;
 
@@ -150,6 +156,7 @@ export function Fretboard(props: Props) {
     compareRootPc,
     sharedOnly,
     spelling,
+    identifyBassMidi,
   });
 
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
@@ -205,10 +212,17 @@ export function Fretboard(props: Props) {
     if (clickToHear) onPlay(midi);
   };
 
+  const picking = viewMode === 'identify' && !!onPick;
+
+  const activate = (stringIndex: number, fret: number, midi: number) => {
+    if (picking) onPick(stringIndex, fret);
+    play(midi);
+  };
+
   const noteClass = (fret: number) => {
     const outside =
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
-    return [clickToHear ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
+    return [clickToHear || picking ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
 
   return (
@@ -315,12 +329,23 @@ export function Fretboard(props: Props) {
               if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
               const ev = activeCells
-                ? evaluate(cell.pc, { placed: activeCells.has(cellKey) })
+                ? evaluate(cell.pc, { placed: activeCells.has(cellKey), midi: cell.midi })
                 : evaluate(cell.pc);
-              if (!ev) return null;
               const x = X(noteX(cell.fret));
               const y = stringY(cell.stringIndex);
               const key = `n-${cell.stringIndex}-${cell.fret}`;
+              if (!ev) {
+                if (!picking) return null;
+                return (
+                  <g
+                    key={key}
+                    className={noteClass(cell.fret)}
+                    onClick={() => activate(cell.stringIndex, cell.fret, cell.midi)}
+                  >
+                    <circle className="note-target" cx={x} cy={y} r={R} />
+                  </g>
+                );
+              }
               if (ev.role === 'ghost') {
                 return (
                   <g key={key} className={noteClass(cell.fret)} onClick={() => play(cell.midi)}>
@@ -333,7 +358,7 @@ export function Fretboard(props: Props) {
                 <g
                   key={key}
                   className={noteClass(cell.fret)}
-                  onClick={() => play(cell.midi)}
+                  onClick={() => activate(cell.stringIndex, cell.fret, cell.midi)}
                 >
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}

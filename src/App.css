@@ -450,6 +450,29 @@ input:focus {
   border-color: var(--accent);
 }
 
+.identify-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.identify-matches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.identify-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .formula-bar {
   display: flex;
   flex-direction: column;

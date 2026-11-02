@@ -13,6 +13,7 @@ import {
   CHORD_QUALITIES,
   buildChord,
   chordInKey,
+  chordSymbol,
   getDiatonicTriad,
   qualityName,
   roleForDegree,
@@ -22,6 +23,7 @@ import type { Chord, ChordQuality, Triad } from './music/chords';
 import { defaultPresetForStrings, getPreset } from './music/tunings';
 import type { GuitarString } from './music/tunings';
 import { buildGrid } from './music/fretboard';
+import { identifyChord } from './music/identify';
 import { chromaticDegreeLabel, labelShift, mod, noteName } from './music/notes';
 import { buildCagedShapes, buildNotePerStringShapes, notesPerString } from './music/shapes';
 import type { ShapeMode } from './music/shapes';
@@ -90,6 +92,8 @@ export interface AppState {
   sharedOnly: boolean;
   /** Inclusive fret range for grips. Open strings are allowed only when min is 0. */
   positionWindow: { enabled: boolean; min: number; max: number };
+  /** Identify view: one fret per string. Missing keys are unpicked strings. */
+  picked: Record<number, number>;
 }
 
 function createInitialState(): AppState {
@@ -136,6 +140,7 @@ function createInitialState(): AppState {
     compareModeKey: 'Aeolian', // parallel natural minor by default
     sharedOnly: false,
     positionWindow: { enabled: false, min: 5, max: 8 },
+    picked: {},
   };
 }
 
@@ -159,6 +164,18 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : fallback;
   return Math.max(lo, Math.min(hi, n));
+}
+
+function readPicked(v: unknown, numStrings: number, fretCount: number): Record<number, number> {
+  if (!isRecord(v)) return {};
+  const picked: Record<number, number> = {};
+  for (const [key, fret] of Object.entries(v)) {
+    const stringIndex = Number(key);
+    if (!Number.isInteger(stringIndex) || stringIndex < 0 || stringIndex >= numStrings) continue;
+    if (typeof fret !== 'number' || !Number.isInteger(fret) || fret < 0 || fret > fretCount) continue;
+    picked[stringIndex] = fret;
+  }
+  return picked;
 }
 
 function readPositionWindow(v: unknown, fretCount: number): AppState['positionWindow'] {
@@ -243,7 +260,10 @@ function mergeApp(raw: unknown): AppState {
     rootPc: clampNum(raw.rootPc, 0, 11, base.rootPc),
     familyKey,
     modeKey: modeOf(familyKey, raw.modeKey, base.modeKey),
-    viewMode: raw.viewMode === 'triad' || raw.viewMode === 'chord' ? raw.viewMode : 'scale',
+    viewMode:
+      raw.viewMode === 'triad' || raw.viewMode === 'chord' || raw.viewMode === 'identify'
+        ? raw.viewMode
+        : 'scale',
     chordDisplay: raw.chordDisplay === 'voicing' ? 'voicing' : 'all',
     voicingIndex: clampNum(raw.voicingIndex, 0, 10000, 0),
     triadDegree: clampNum(raw.triadDegree, 0, 6, 0),
@@ -286,6 +306,7 @@ function mergeApp(raw: unknown): AppState {
     compareModeKey: modeOf(compareFamilyKey, raw.compareModeKey, base.compareModeKey),
     sharedOnly: raw.sharedOnly === true,
     positionWindow: readPositionWindow(raw.positionWindow, fretCount),
+    picked: readPicked(raw.picked, numStrings, fretCount),
   };
 }
 
@@ -357,6 +378,7 @@ export default function App() {
       hiddenStrings: [],
       voicingSetStart: Math.max(0, n - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth)),
       voicingIndex: 0,
+      picked: {},
     }));
   };
 
@@ -371,6 +393,7 @@ export default function App() {
       hiddenStrings: s.hiddenStrings.filter((i) => i < preset.strings),
       voicingSetStart: Math.max(0, Math.min(s.voicingSetStart, preset.strings - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth))),
       voicingIndex: 0,
+      picked: {},
     }));
   };
 
@@ -380,7 +403,17 @@ export default function App() {
       tuningId: 'custom',
       tuning: s.tuning.map((t, i) => (i === stringIndex ? { ...t, pc } : t)),
       voicingIndex: 0,
+      picked: {},
     }));
+  };
+
+  const togglePicked = (stringIndex: number, fret: number) => {
+    setState((s) => {
+      const picked = { ...s.picked };
+      if (picked[stringIndex] === fret) delete picked[stringIndex];
+      else picked[stringIndex] = fret;
+      return { ...s, picked };
+    });
   };
 
   const handleFamily = (familyKey: FamilyKey) => {
@@ -562,10 +595,29 @@ export default function App() {
   const voicingIndex = voicingCount === 0 ? 0 : Math.min(state.voicingIndex, voicingCount - 1);
   const selectedVoicing = voicingCount > 0 ? generatedVoicings[voicingIndex] : null;
   const shownVoicing = playbackVoicing ?? (oneVoicing ? selectedVoicing : null);
+  const pickedNotes = useMemo(() => {
+    const notes = [];
+    for (const [key, fret] of Object.entries(state.picked)) {
+      const cell = grid[Number(key)]?.[fret];
+      if (cell) notes.push(cell);
+    }
+    notes.sort((a, b) => a.midi - b.midi);
+    return notes;
+  }, [grid, state.picked]);
+  const identifyMatches = useMemo(() => {
+    if (state.viewMode !== 'identify' || pickedNotes.length < 2) return [];
+    return identifyChord(
+      pickedNotes.map((note) => note.pc),
+      pickedNotes[0].pc,
+    ).slice(0, 5);
+  }, [state.viewMode, pickedNotes]);
   const activeCells = useMemo(() => {
+    if (state.viewMode === 'identify') {
+      return new Set(Object.entries(state.picked).map(([stringIndex, fret]) => `${stringIndex}:${fret}`));
+    }
     if (!shownVoicing) return undefined;
     return new Set(shownVoicing.notes.map((note) => `${note.stringIndex}:${note.fret}`));
-  }, [shownVoicing]);
+  }, [state.viewMode, state.picked, shownVoicing]);
   const voicingPcs = useMemo(() => {
     if (!shownVoicing) return null;
     return new Set(shownVoicing.notes.map((note) => note.pc));
@@ -596,7 +648,10 @@ export default function App() {
     onlyCells = activeShape.cells;
     caption = activeShape.name;
   }
-  if (playbackVoicing || oneVoicing) onlyCells = null;
+  if (playbackVoicing || oneVoicing || state.viewMode === 'identify') {
+    onlyCells = null;
+    if (state.viewMode === 'identify') caption = null;
+  }
 
   const guidePcs = useMemo(() => {
     if (!guideActive || !state.activeChord) return null;
@@ -874,7 +929,7 @@ export default function App() {
             {reading.inversion && <p className="formula-caption">{reading.inversion}</p>}
           </>
         )}
-        {diatonic.name && state.viewMode !== 'scale' && (
+        {diatonic.name && (state.viewMode === 'triad' || state.viewMode === 'chord') && (
           <p className="formula-caption">Triads follow {diatonic.name}</p>
         )}
         {caption && <p className="formula-caption">{caption}</p>}
@@ -910,6 +965,8 @@ export default function App() {
             spelling={spelling}
             guidePcs={guidePcs}
             activeCells={activeCells}
+            identifyBassMidi={state.viewMode === 'identify' ? pickedNotes[0]?.midi : undefined}
+            onPick={togglePicked}
             window={
               state.positionWindow.enabled
                 ? { min: state.positionWindow.min, max: state.positionWindow.max }
@@ -918,6 +975,58 @@ export default function App() {
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
           />
+        )}
+        {state.viewMode === 'identify' && (
+          <div className="identify-panel" aria-label="Chord identify">
+            <div className="identify-matches">
+              {identifyMatches.length === 0 ? (
+                <span className="muted">
+                  {pickedNotes.length < 2 ? 'Pick two or more notes' : 'No match'}
+                </span>
+              ) : (
+                identifyMatches.map((match, i) => {
+                  const bass =
+                    match.inversion && match.bassPc !== undefined
+                      ? `/${noteName(mod(match.bassPc + shift, 12))}`
+                      : '';
+                  const missing = match.match === 'subset' ? ' (no 5th)' : '';
+                  return (
+                    <span
+                      key={`${match.chord.rootPc}-${match.chord.symbol}-${match.match}-${i}`}
+                      className={match.match === 'subset' ? 'identify-match muted' : 'identify-match'}
+                    >
+                      {chordSymbol(match.chord, shift)}
+                      {bass}
+                      {missing}
+                    </span>
+                  );
+                })
+              )}
+            </div>
+            <div className="identify-actions">
+              <button
+                type="button"
+                className="btn-mini"
+                onClick={() => update({ picked: {} })}
+                disabled={pickedNotes.length === 0}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                className="btn-mini"
+                onClick={() =>
+                  player.playChord(
+                    pickedNotes.map((note) => note.midi),
+                    { durationMs: 1200 },
+                  )
+                }
+                disabled={pickedNotes.length === 0}
+              >
+                Play
+              </button>
+            </div>
+          </div>
         )}
         {(state.instrumentView === 'keyboard' || state.instrumentView === 'both') && (
           <Keyboard

@@ -572,6 +572,12 @@ export function Controls(props: Props) {
             >
               Chords
             </button>
+            <button
+              className={state.viewMode === 'identify' ? 'active' : ''}
+              onClick={() => onUpdate({ viewMode: 'identify' })}
+            >
+              Identify
+            </button>
           </div>
         </div>
         {state.viewMode === 'chord' && (

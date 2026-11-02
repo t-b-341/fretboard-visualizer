@@ -40,6 +40,25 @@ function context(over: Partial<HighlightContext> = {}): HighlightContext {
   };
 }
 
+describe('createEvaluator identify', () => {
+  it('draws picked notes, marks the lowest as root, and hides the rest', () => {
+    const evaluate = createEvaluator(context({ viewMode: 'identify', identifyBassMidi: 40 }));
+    expect(evaluate(4)).toBeNull();
+    expect(evaluate(4, { placed: false, midi: 40 })).toBeNull();
+    expect(evaluate(4, { placed: true, midi: 40 })).toEqual({ role: 'root', label: 'E' });
+    // Same pitch class an octave higher is not the bass.
+    expect(evaluate(4, { placed: true, midi: 52 })).toEqual({ role: 'scale', label: 'E' });
+    expect(evaluate(0, { placed: true, midi: 48 })).toEqual({ role: 'scale', label: 'C' });
+  });
+
+  it('shifts identify labels with the concert/standard offset', () => {
+    const evaluate = createEvaluator(
+      context({ viewMode: 'identify', shift: 1, identifyBassMidi: 40 }),
+    );
+    expect(evaluate(4, { placed: true, midi: 40 })?.label).toBe('F');
+  });
+});
+
 describe('createEvaluator voicing placement', () => {
   const evaluate = createEvaluator(context());
 
