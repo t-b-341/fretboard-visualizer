@@ -5,7 +5,7 @@ import type { GuitarString } from './music/tunings';
 import { defaultPresetForStrings, getPreset } from './music/tunings';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 
-const VIEW_MODES = ['scale', 'triad', 'chord', 'identify'] as const satisfies readonly ViewMode[];
+const VIEW_MODES = ['scale', 'triad', 'chord', 'identify', 'quiz'] as const satisfies readonly ViewMode[];
 const LABEL_MODES = ['concert', 'standard'] as const satisfies readonly LabelMode[];
 const DISPLAY_MODES = ['note', 'degree'] as const satisfies readonly DisplayMode[];
 const INSTRUMENT_VIEWS = ['fretboard', 'keyboard', 'both'] as const satisfies readonly InstrumentView[];
@@ -17,6 +17,7 @@ function fromDefaults(defaults: AppState): AppState {
     hiddenStrings: [...defaults.hiddenStrings],
     positionWindow: { ...defaults.positionWindow },
     picked: { ...defaults.picked },
+    quiz: { ...defaults.quiz, marks: { ...defaults.quiz.marks } },
   };
 }
 

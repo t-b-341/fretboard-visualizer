@@ -14,6 +14,7 @@ scales, modes, and diatonic triads, built for half-step-down tuning.
 - **Diatonic triads I–vii** for the selected key, labeled with Roman numeral and quality,
   plus a chord builder and progressions.
 - **Chord identify:** pick notes on the neck, one per string, and see the closest chord names, including inversions and a missing fifth.
+- **Quiz:** the neck starts blank and asks you to find one tone of a chord, such as the b7 of G7. The first click scores the question, and Next deals another.
 - **One voicing:** in Chords view, step through a single playable grip on the neck and keyboard instead of lighting every chord tone.
 - **Voice-led playback and export:** with Voice leading on, Play and Export .mid walk a smooth path of grips instead of restacking every chord in root position.
 - **Adjustable voice-leading weights:** with Voice leading on, open Voice leading weights to tune each cost. Reset restores the defaults, and a change while playing applies on the next chord.

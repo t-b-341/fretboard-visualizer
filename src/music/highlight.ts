@@ -20,7 +20,9 @@ export type Role =
   | 'ghost'
   | 'shared'
   | 'primaryOnly'
-  | 'overlayOnly';
+  | 'overlayOnly'
+  | 'right'
+  | 'wrong';
 
 export interface NoteHighlight {
   role: Role;
@@ -52,6 +54,8 @@ export interface HighlightContext {
   restrictPcs?: Set<number> | null;
   /** MIDI of the lowest picked note. Identify view paints that cell as the root. */
   identifyBassMidi?: number;
+  /** Quiz view: "stringIndex:fret" cells already answered right or wrong. */
+  quizMarks?: Record<string, 'right' | 'wrong'>;
   /**
    * Spelled names keyed by the displayed pitch class (concert pitch plus the
    * label shift). Scale tones first; chord tones the scale doesn't cover fill
@@ -67,7 +71,7 @@ export interface HighlightContext {
  */
 export function createEvaluator(
   ctx: HighlightContext,
-): (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null {
+): (pc: number, opts?: { placed?: boolean; midi?: number; cellKey?: string }) => NoteHighlight | null {
   const {
     rootPc,
     intervals,
@@ -85,6 +89,7 @@ export function createEvaluator(
     restrictPcs,
     spelling,
     identifyBassMidi,
+    quizMarks,
   } = ctx;
 
   // Pre-map the active chord's pitch classes to their role and degree label.
@@ -100,7 +105,18 @@ export function createEvaluator(
     }
   }
 
-  return function evaluate(pc: number, opts?: { placed?: boolean; midi?: number }): NoteHighlight | null {
+  return function evaluate(
+    pc: number,
+    opts?: { placed?: boolean; midi?: number; cellKey?: string },
+  ): NoteHighlight | null {
+    // Quiz: a blank neck. Only cells the player has already tried are drawn,
+    // and only as a right or wrong mark — no note name and no scale colour.
+    if (viewMode === 'quiz') {
+      const mark = opts?.cellKey ? quizMarks?.[opts.cellKey] : undefined;
+      if (mark !== 'right' && mark !== 'wrong') return null;
+      return { role: mark, label: '' };
+    }
+
     if (restrictPcs && !restrictPcs.has(pc)) return null;
     const idx = pcToIndex.get(pc);
     const inScale = idx !== undefined;

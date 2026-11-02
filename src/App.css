@@ -261,6 +261,12 @@ input:focus {
 .note-overlayOnly {
   fill: var(--overlay);
 }
+.note-right {
+  fill: var(--third);
+}
+.note-wrong {
+  fill: var(--root);
+}
 .note-root-ring {
   fill: none;
   stroke: #ffd36b;
@@ -471,6 +477,32 @@ input:focus {
 .identify-actions {
   display: flex;
   gap: 6px;
+}
+
+.quiz-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.quiz-prompt {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.quiz-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quiz-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .formula-bar {

@@ -59,6 +59,21 @@ describe('createEvaluator identify', () => {
   });
 });
 
+describe('createEvaluator quiz', () => {
+  it('draws only right and wrong marks, with no label', () => {
+    const evaluate = createEvaluator(
+      context({
+        viewMode: 'quiz',
+        quizMarks: { '0:3': 'right', '1:5': 'wrong' },
+      }),
+    );
+    expect(evaluate(4)).toBeNull();
+    expect(evaluate(4, { cellKey: '2:1' })).toBeNull();
+    expect(evaluate(7, { cellKey: '0:3' })).toEqual({ role: 'right', label: '' });
+    expect(evaluate(10, { cellKey: '1:5' })).toEqual({ role: 'wrong', label: '' });
+  });
+});
+
 describe('createEvaluator voicing placement', () => {
   const evaluate = createEvaluator(context());
 

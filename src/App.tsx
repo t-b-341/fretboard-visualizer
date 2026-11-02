@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
@@ -24,6 +24,8 @@ import { defaultPresetForStrings, getPreset } from './music/tunings';
 import type { GuitarString } from './music/tunings';
 import { buildGrid } from './music/fretboard';
 import { identifyChord } from './music/identify';
+import { makeQuestion } from './music/quiz';
+import type { Question } from './music/quiz';
 import { chromaticDegreeLabel, labelShift, mod, noteName } from './music/notes';
 import { buildCagedShapes, buildNotePerStringShapes, notesPerString } from './music/shapes';
 import type { ShapeMode } from './music/shapes';
@@ -35,7 +37,7 @@ import type { Voicing, VoicingStyle } from './music/voicings';
 import { guideTonePcs } from './music/guide';
 import { CONTROLLER_BASE_OCTAVES, clampControllerShift, controllerWindow, cMidi } from './music/keys';
 import type { ControllerBaseOctave } from './music/keys';
-import { PROGRESSION_TEMPLATES } from './music/progression';
+import { PROGRESSION_TEMPLATES, mulberry32 } from './music/progression';
 import type { ViewMode, LabelMode, DisplayMode, InstrumentView } from './music/types';
 import { player } from './audio/player';
 import { deleteNamed, loadStore, saveLast, saveNamed } from './state/setups';
@@ -95,6 +97,13 @@ export interface AppState {
   positionWindow: { enabled: boolean; min: number; max: number };
   /** Identify view: one fret per string. Missing keys are unpicked strings. */
   picked: Record<number, number>;
+  /** Quiz view. Mark keys are "stringIndex:fret". */
+  quiz: {
+    question: Question | null;
+    marks: Record<string, 'right' | 'wrong'>;
+    score: number;
+    total: number;
+  };
 }
 
 export function createInitialState(): AppState {
@@ -142,6 +151,7 @@ export function createInitialState(): AppState {
     sharedOnly: false,
     positionWindow: { enabled: false, min: 5, max: 8 },
     picked: {},
+    quiz: { question: null, marks: {}, score: 0, total: 0 },
   };
 }
 
@@ -262,7 +272,10 @@ function mergeApp(raw: unknown): AppState {
     familyKey,
     modeKey: modeOf(familyKey, raw.modeKey, base.modeKey),
     viewMode:
-      raw.viewMode === 'triad' || raw.viewMode === 'chord' || raw.viewMode === 'identify'
+      raw.viewMode === 'triad' ||
+      raw.viewMode === 'chord' ||
+      raw.viewMode === 'identify' ||
+      raw.viewMode === 'quiz'
         ? raw.viewMode
         : 'scale',
     chordDisplay: raw.chordDisplay === 'voicing' ? 'voicing' : 'all',
@@ -356,6 +369,8 @@ export default function App() {
   const progRef = useRef(boot.progression);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const quizRnd = useRef<(() => number) | null>(null);
+  if (quizRnd.current == null) quizRnd.current = mulberry32((Math.random() * 2 ** 32) >>> 0);
   const update = (patch: Partial<AppState>) => setState((s) => ({ ...s, ...patch }));
 
   useEffect(() => {
@@ -425,6 +440,28 @@ export default function App() {
     });
   };
 
+  const answerQuiz = (stringIndex: number, fret: number, pc: number) => {
+    setState((s) => {
+      const question = s.quiz.question;
+      if (s.viewMode !== 'quiz' || !question) return s;
+      const window = s.positionWindow;
+      if (window.enabled && (fret < window.min || fret > window.max)) return s;
+      const key = `${stringIndex}:${fret}`;
+      if (s.quiz.marks[key]) return s;
+      const mark = pc === question.targetPc ? 'right' : 'wrong';
+      const first = Object.keys(s.quiz.marks).length === 0;
+      return {
+        ...s,
+        quiz: {
+          ...s.quiz,
+          marks: { ...s.quiz.marks, [key]: mark },
+          score: first && mark === 'right' ? s.quiz.score + 1 : s.quiz.score,
+          total: first ? s.quiz.total + 1 : s.quiz.total,
+        },
+      };
+    });
+  };
+
   const handleFamily = (familyKey: FamilyKey) => {
     const fam = getFamily(familyKey);
     setState((s) => ({ ...s, familyKey, modeKey: fam.modes[0].key, triadDegree: 0 }));
@@ -491,6 +528,27 @@ export default function App() {
   const mode = family.modes.find((m) => m.key === state.modeKey) ?? family.modes[0];
   const intervals = mode.intervals;
   const shift = labelShift(state.labelMode);
+
+  useLayoutEffect(() => {
+    if (state.viewMode !== 'quiz' || state.quiz.question) return;
+    const rnd = quizRnd.current;
+    if (!rnd) return;
+    const question = makeQuestion(rnd, state.rootPc, intervals, shift);
+    setState((s) => {
+      if (s.viewMode !== 'quiz' || s.quiz.question) return s;
+      return { ...s, quiz: { ...s.quiz, question } };
+    });
+  }, [state.viewMode, state.quiz.question, state.rootPc, intervals, shift]);
+
+  const nextQuiz = () => {
+    const rnd = quizRnd.current;
+    if (!rnd) return;
+    const question = makeQuestion(rnd, state.rootPc, intervals, shift);
+    setState((s) => ({
+      ...s,
+      quiz: { ...s.quiz, question, marks: {} },
+    }));
+  };
 
   const scalePcs = useMemo(() => getScaleNotes(state.rootPc, intervals), [state.rootPc, intervals]);
 
@@ -657,9 +715,9 @@ export default function App() {
     onlyCells = activeShape.cells;
     caption = activeShape.name;
   }
-  if (playbackVoicing || oneVoicing || state.viewMode === 'identify') {
+  if (playbackVoicing || oneVoicing || state.viewMode === 'identify' || state.viewMode === 'quiz') {
     onlyCells = null;
-    if (state.viewMode === 'identify') caption = null;
+    if (state.viewMode === 'identify' || state.viewMode === 'quiz') caption = null;
   }
 
   const guidePcs = useMemo(() => {
@@ -976,6 +1034,8 @@ export default function App() {
             activeCells={activeCells}
             identifyBassMidi={state.viewMode === 'identify' ? pickedNotes[0]?.midi : undefined}
             onPick={togglePicked}
+            quizMarks={state.quiz.marks}
+            onQuizAnswer={answerQuiz}
             window={
               state.positionWindow.enabled
                 ? { min: state.positionWindow.min, max: state.positionWindow.max }
@@ -984,6 +1044,19 @@ export default function App() {
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
           />
+        )}
+        {state.viewMode === 'quiz' && state.quiz.question && (
+          <div className="quiz-panel" aria-label="Quiz">
+            <p className="quiz-prompt">{state.quiz.question.prompt}</p>
+            <div className="quiz-actions">
+              <span className="quiz-score" aria-label="Score">
+                {state.quiz.score} / {state.quiz.total}
+              </span>
+              <button type="button" className="btn-mini" onClick={nextQuiz}>
+                Next
+              </button>
+            </div>
+          </div>
         )}
         {state.viewMode === 'identify' && (
           <div className="identify-panel" aria-label="Chord identify">

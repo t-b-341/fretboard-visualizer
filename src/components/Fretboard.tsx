@@ -56,6 +56,10 @@ interface Props {
   identifyBassMidi?: number;
   /** Identify view: pick or clear the note at this string and fret. */
   onPick?: (stringIndex: number, fret: number) => void;
+  /** Quiz view: "stringIndex:fret" cells already marked right or wrong. */
+  quizMarks?: Record<string, 'right' | 'wrong'>;
+  /** Quiz view: answer the tone at this string and fret. */
+  onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -103,6 +107,8 @@ export function Fretboard(props: Props) {
     activeCells,
     identifyBassMidi,
     onPick,
+    quizMarks,
+    onQuizAnswer,
     window: positionWindow,
   } = props;
 
@@ -157,6 +163,7 @@ export function Fretboard(props: Props) {
     sharedOnly,
     spelling,
     identifyBassMidi,
+    quizMarks,
   });
 
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
@@ -213,16 +220,23 @@ export function Fretboard(props: Props) {
   };
 
   const picking = viewMode === 'identify' && !!onPick;
+  const quizzing = viewMode === 'quiz' && !!onQuizAnswer;
 
   const activate = (stringIndex: number, fret: number, midi: number) => {
     if (picking) onPick(stringIndex, fret);
     play(midi);
   };
 
+  const answerQuiz = (stringIndex: number, fret: number, pc: number, midi: number) => {
+    if (positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max)) return;
+    onQuizAnswer?.(stringIndex, fret, pc);
+    play(midi);
+  };
+
   const noteClass = (fret: number) => {
     const outside =
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
-    return [clickToHear || picking ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
+    return [clickToHear || picking || quizzing ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
 
   return (
@@ -328,20 +342,22 @@ export function Fretboard(props: Props) {
               if (cell.fret < from || cell.fret > to) return null;
               if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
-              const ev = activeCells
-                ? evaluate(cell.pc, { placed: activeCells.has(cellKey), midi: cell.midi })
-                : evaluate(cell.pc);
+              const ev = quizzing
+                ? evaluate(cell.pc, { cellKey })
+                : activeCells
+                  ? evaluate(cell.pc, { placed: activeCells.has(cellKey), midi: cell.midi })
+                  : evaluate(cell.pc);
               const x = X(noteX(cell.fret));
               const y = stringY(cell.stringIndex);
               const key = `n-${cell.stringIndex}-${cell.fret}`;
+              const onCellClick = () =>
+                quizzing
+                  ? answerQuiz(cell.stringIndex, cell.fret, cell.pc, cell.midi)
+                  : activate(cell.stringIndex, cell.fret, cell.midi);
               if (!ev) {
-                if (!picking) return null;
+                if (!picking && !quizzing) return null;
                 return (
-                  <g
-                    key={key}
-                    className={noteClass(cell.fret)}
-                    onClick={() => activate(cell.stringIndex, cell.fret, cell.midi)}
-                  >
+                  <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
                     <circle className="note-target" cx={x} cy={y} r={R} />
                   </g>
                 );
@@ -355,11 +371,7 @@ export function Fretboard(props: Props) {
                 );
               }
               return (
-                <g
-                  key={key}
-                  className={noteClass(cell.fret)}
-                  onClick={() => activate(cell.stringIndex, cell.fret, cell.midi)}
-                >
+                <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}

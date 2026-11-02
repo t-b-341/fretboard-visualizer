@@ -610,6 +610,12 @@ export function Controls(props: Props) {
             >
               Identify
             </button>
+            <button
+              className={state.viewMode === 'quiz' ? 'active' : ''}
+              onClick={() => onUpdate({ viewMode: 'quiz' })}
+            >
+              Quiz
+            </button>
           </div>
         </div>
         {state.viewMode === 'chord' && (
