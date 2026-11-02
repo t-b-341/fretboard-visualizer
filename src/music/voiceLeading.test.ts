@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { buildChord, type Chord, type ChordToneRole } from './chords';
+import { buildChord, buildDiatonicChord, type Chord, type ChordToneRole } from './chords';
 import { midiOf, noteAt } from './fretboard';
 import { mod } from './notes';
+import { getFamily } from './scales';
 import { getPreset, type GuitarString } from './tunings';
-import type { Voicing, VoicedNote } from './voicings';
-import { DEFAULT_WEIGHTS, transitionCost, voicingCost, type Weights } from './voiceLeading';
+import { generateVoicings, type Voicing, type VoicedNote } from './voicings';
+import {
+  DEFAULT_WEIGHTS,
+  leadGreedy,
+  leadProgression,
+  pathCost,
+  transitionCost,
+  voicingCost,
+  type Weights,
+} from './voiceLeading';
 
 // 7-string standard, low to high: B1 E2 A2 D3 G3 B3 E4.
 // Open MIDI: 35, 40, 45, 50, 55, 59, 64.
@@ -259,6 +268,94 @@ describe('transitionCost', () => {
     const fs3 = makeVoicing(standard7, [null, null, null, 4, null, null, null], buildChord(6, 'maj'));
     expect(fs3.notes[0].midi - e3.notes[0].midi).toBe(2);
     expect(transitionCost(e3, fs3, onlyResolution)).toBeCloseTo(0);
+  });
+});
+
+const halfDown7 = getPreset('7-half-down')!.notes;
+const ionian = getFamily('major').modes.find((mode) => mode.key === 'Ionian')!.intervals;
+
+/** ii7–V7–Imaj7 in C: Dm7, G7, Cmaj7. */
+function twoFiveOne(): Chord[] {
+  return [
+    buildDiatonicChord(0, ionian, 1, true),
+    buildDiatonicChord(0, ionian, 4, true),
+    buildDiatonicChord(0, ionian, 0, true),
+  ];
+}
+
+/** Deterministic unit interval. Numerical Recipes LCG. */
+function makeRng(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+describe('leadProgression', () => {
+  it('returns 3 voicings for ii7–V7–Imaj7 and costs no more than greedy', () => {
+    const chords = twoFiveOne();
+    const viterbi = leadProgression(chords, halfDown7);
+    const greedy = leadGreedy(chords, halfDown7);
+    expect(viterbi).toHaveLength(3);
+    expect(greedy).toHaveLength(3);
+    expect(pathCost(viterbi)).toBeLessThanOrEqual(pathCost(greedy));
+  });
+
+  it('is never worse than greedy over 20 seeded 6-chord diatonic progressions', () => {
+    const rng = makeRng(1);
+    for (let n = 0; n < 20; n++) {
+      const chords = Array.from({ length: 6 }, () =>
+        buildDiatonicChord(0, ionian, Math.floor(rng() * 7), true),
+      );
+      const viterbi = leadProgression(chords, halfDown7);
+      const greedy = leadGreedy(chords, halfDown7);
+      expect(viterbi).toHaveLength(6);
+      expect(pathCost(viterbi)).toBeLessThanOrEqual(pathCost(greedy));
+    }
+  });
+
+  it('voices an 8-chord progression at maxCandidates 60 in under 200 ms', () => {
+    const degrees = [0, 1, 4, 0, 5, 3, 4, 0];
+    const chords = degrees.map((degree) => buildDiatonicChord(0, ionian, degree, true));
+    const start = performance.now();
+    const path = leadProgression(chords, halfDown7, DEFAULT_WEIGHTS, { maxCandidates: 60 });
+    const elapsed = performance.now() - start;
+    expect(path).toHaveLength(8);
+    expect(elapsed).toBeLessThan(200);
+  });
+
+  it('returns the single cheapest voicing for one chord', () => {
+    const chord = buildDiatonicChord(0, ionian, 0, true);
+    const path = leadProgression([chord], halfDown7);
+    const cheapest = Math.min(...generateVoicings(chord, halfDown7).map((voicing) => voicingCost(voicing)));
+    expect(path).toHaveLength(1);
+    expect(voicingCost(path[0])).toBeCloseTo(cheapest);
+    expect(pathCost(path)).toBeCloseTo(cheapest);
+  });
+
+  it('keeps ii–V–I minFret moves within 3 when handShift is 10', () => {
+    const heavyHand: Weights = { ...DEFAULT_WEIGHTS, handShift: 10 };
+    const path = leadProgression(twoFiveOne(), halfDown7, heavyHand);
+    expect(path).toHaveLength(3);
+    for (let i = 1; i < path.length; i++) {
+      expect(Math.abs(path[i].minFret - path[i - 1].minFret)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('throws when a chord has no playable voicing and names that chord', () => {
+    const chord = buildDiatonicChord(0, ionian, 0, true);
+    expect(chord.symbol).toBe('maj7');
+    // Seven strings cannot sound 8 notes, and the root/maxSpan retry does not lift minNotes.
+    expect(() => leadProgression([chord], halfDown7, DEFAULT_WEIGHTS, { minNotes: 8 })).toThrow(
+      /No playable voicing for chord 1[\s\S]*maj7/,
+    );
+  });
+
+  it('returns an empty path for an empty progression', () => {
+    expect(leadProgression([], halfDown7)).toEqual([]);
+    expect(leadGreedy([], halfDown7)).toEqual([]);
+    expect(pathCost([])).toBe(0);
   });
 });
 
