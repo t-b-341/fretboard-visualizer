@@ -14,6 +14,20 @@ interface CellRef {
   fret: number;
 }
 
+export interface PracticeMark {
+  fill: string;
+  label: string;
+  ring?: boolean;
+}
+
+/** Note-quiz overlay. While set, scale and chord highlights stay hidden. */
+export interface PracticeOverlay {
+  marks: Record<string, PracticeMark>;
+  heatmap: boolean;
+  listen: boolean;
+  onCell: (stringIndex: number, fret: number, pc: number, midi: number) => void;
+}
+
 interface Props {
   grid: Cell[][];
   tuning: GuitarString[];
@@ -48,6 +62,8 @@ interface Props {
   onPick?: (stringIndex: number, fret: number) => void;
   /** Quiz view: answer the tone at this string and fret. */
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
+  /** Note quiz. Replaces ordinary highlighting for as long as it is set. */
+  practice?: PracticeOverlay | null;
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -87,6 +103,7 @@ export function Fretboard(props: Props) {
     onQuizAnswer,
     evaluate,
     window: positionWindow,
+    practice,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -124,8 +141,8 @@ export function Fretboard(props: Props) {
   const X = (x: number) => (leftHanded ? width - x : x);
   const rectX = (x: number, w: number) => (leftHanded ? width - x - w : x);
 
-  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
-  const guideActive = guideTones && viewMode === 'chord' && !!activeChord;
+  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled && !practice;
+  const guideActive = !practice && guideTones && viewMode === 'chord' && !!activeChord;
   const chordId = activeChord
     ? `${activeChord.rootPc}:${activeChord.symbol}:${activeChord.tones.map((t) => t.interval).join(',')}`
     : '';
@@ -162,7 +179,7 @@ export function Fretboard(props: Props) {
     prevPoints.current = guideVoices.map((v) => v.point);
   }, [guideVoices, chordId]);
 
-  const allow = onlyKeys;
+  const allow = practice ? null : onlyKeys;
 
   const wires: number[] = [];
   if (showOpen) {
@@ -177,8 +194,8 @@ export function Fretboard(props: Props) {
     if (clickToHear) onPlay(midi);
   };
 
-  const picking = viewMode === 'identify' && !!onPick;
-  const quizzing = viewMode === 'quiz' && !!onQuizAnswer;
+  const picking = !practice && viewMode === 'identify' && !!onPick;
+  const quizzing = !practice && viewMode === 'quiz' && !!onQuizAnswer;
 
   const activate = (stringIndex: number, fret: number, midi: number) => {
     if (picking) onPick(stringIndex, fret);
@@ -300,6 +317,39 @@ export function Fretboard(props: Props) {
               if (cell.fret < from || cell.fret > to) return null;
               if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
+              if (practice) {
+                const mark = practice.marks[cellKey];
+                if (!mark && !practice.heatmap && !practice.listen) return null;
+                const x = X(noteX(cell.fret));
+                const y = stringY(cell.stringIndex);
+                const label = mark?.label ?? '';
+                const click = () => practice.onCell(cell.stringIndex, cell.fret, cell.pc, cell.midi);
+                return (
+                  <g
+                    key={`n-${cell.stringIndex}-${cell.fret}`}
+                    className={practice.listen ? 'note-hit' : undefined}
+                    onClick={practice.listen ? click : undefined}
+                  >
+                    {mark || practice.heatmap ? (
+                      <circle className="note" fill={mark?.fill ?? '#3d4756'} cx={x} cy={y} r={R} />
+                    ) : (
+                      <circle className="note-target" cx={x} cy={y} r={R} />
+                    )}
+                    {mark?.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                    {label && (
+                      <text
+                        className={label.length > 2 ? 'practice-label practice-label-long' : 'practice-label'}
+                        x={x}
+                        y={y}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                      >
+                        {label}
+                      </text>
+                    )}
+                  </g>
+                );
+              }
               const ev = quizzing
                 ? evaluate(cell.pc, { cellKey })
                 : activeCells

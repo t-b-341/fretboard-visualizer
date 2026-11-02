@@ -18,6 +18,11 @@ function fromDefaults(defaults: AppState): AppState {
     positionWindow: { ...defaults.positionWindow },
     picked: { ...defaults.picked },
     quiz: { ...defaults.quiz, marks: { ...defaults.quiz.marks } },
+    noteQuiz: {
+      ...defaults.noteQuiz,
+      strings: [...defaults.noteQuiz.strings],
+      types: { ...defaults.noteQuiz.types },
+    },
   };
 }
 

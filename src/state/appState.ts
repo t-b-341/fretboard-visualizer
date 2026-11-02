@@ -12,7 +12,7 @@ import { CONTROLLER_BASE_OCTAVES, clampControllerShift } from '../music/keys';
 import type { ControllerBaseOctave } from '../music/keys';
 import { mod } from '../music/notes';
 import { PROGRESSION_TEMPLATES } from '../music/progression';
-import type { Question } from '../music/quiz';
+import { defaultNoteQuizSettings, type NoteQuizSettings, type Question } from '../music/quiz';
 import { SCALE_FAMILIES, getFamily } from '../music/scales';
 import type { FamilyKey } from '../music/scales';
 import type { ShapeMode } from '../music/shapes';
@@ -82,6 +82,8 @@ export interface AppState {
     score: number;
     total: number;
   };
+  /** Note, interval, and ear drill. The answer log lives in its own storage key. */
+  noteQuiz: NoteQuizSettings;
 }
 
 export function createInitialState(): AppState {
@@ -131,6 +133,24 @@ export function createInitialState(): AppState {
     positionWindow: { enabled: false, min: 5, max: 8 },
     picked: {},
     quiz: { question: null, marks: {}, score: 0, total: 0 },
+    noteQuiz: defaultNoteQuizSettings(7, 24),
+  };
+}
+
+/** Keep note-quiz frets and strings inside the current instrument. */
+export function fitNoteQuiz(settings: NoteQuizSettings, numStrings: number, fretCount: number): NoteQuizSettings {
+  const fretMin = clampNum(settings.fretMin, 0, fretCount, 0);
+  let fretMax = clampNum(settings.fretMax, 0, fretCount, fretMin);
+  if (fretMax < fretMin) fretMax = fretMin;
+  const strings = [...new Set(settings.strings.filter((i) => Number.isInteger(i) && i >= 0 && i < numStrings))].sort(
+    (a, b) => a - b,
+  );
+  return {
+    ...settings,
+    types: { ...settings.types },
+    fretMin,
+    fretMax,
+    strings,
   };
 }
 
@@ -301,7 +321,35 @@ export function mergeApp(raw: unknown): AppState {
     sharedOnly: raw.sharedOnly === true,
     positionWindow: readPositionWindow(raw.positionWindow, fretCount),
     picked: readPicked(raw.picked, numStrings, fretCount),
+    noteQuiz: readNoteQuiz(raw.noteQuiz, numStrings, fretCount),
   };
+}
+
+function readNoteQuiz(v: unknown, numStrings: number, fretCount: number): NoteQuizSettings {
+  const base = defaultNoteQuizSettings(numStrings, fretCount);
+  if (!isRecord(v)) return base;
+  const typesIn = isRecord(v.types) ? v.types : {};
+  const flag = (key: keyof NoteQuizSettings['types']) =>
+    typeof typesIn[key] === 'boolean' ? (typesIn[key] as boolean) : base.types[key];
+  return fitNoteQuiz(
+    {
+      enabled: v.enabled === true,
+      strings: Array.isArray(v.strings) ? v.strings.filter((n): n is number => typeof n === 'number') : base.strings,
+      fretMin: typeof v.fretMin === 'number' ? v.fretMin : base.fretMin,
+      fretMax: typeof v.fretMax === 'number' ? v.fretMax : base.fretMax,
+      naturalsOnly: v.naturalsOnly === true,
+      keyContext: v.keyContext === 'key' ? 'key' : 'none',
+      types: {
+        nameNote: flag('nameNote'),
+        findNote: flag('findNote'),
+        intervalFromRoot: flag('intervalFromRoot'),
+        earInterval: flag('earInterval'),
+      },
+      harmonic: v.harmonic === true,
+    },
+    numStrings,
+    fretCount,
+  );
 }
 
 export function mergeProgression(raw: unknown): ProgressionSnapshot {

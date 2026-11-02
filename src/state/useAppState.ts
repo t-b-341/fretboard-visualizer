@@ -17,6 +17,7 @@ import { decodeState, encodeState } from '../urlState';
 import {
   createInitialState,
   defaultProgression,
+  fitNoteQuiz,
   mergeApp,
   mergeProgression,
 } from './appState';
@@ -94,6 +95,7 @@ export function useAppState() {
       voicingSetStart: Math.max(0, n - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth)),
       voicingIndex: 0,
       picked: {},
+      noteQuiz: fitNoteQuiz(s.noteQuiz, n, s.fretCount),
     }));
   };
 
@@ -109,6 +111,7 @@ export function useAppState() {
       voicingSetStart: Math.max(0, Math.min(s.voicingSetStart, preset.strings - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth))),
       voicingIndex: 0,
       picked: {},
+      noteQuiz: fitNoteQuiz(s.noteQuiz, preset.strings, s.fretCount),
     }));
   };
 

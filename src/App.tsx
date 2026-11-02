@@ -8,9 +8,11 @@ import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
 import { MidiControls } from './components/MidiControls';
 import { ProgressionControls } from './components/ProgressionControls';
+import { Quiz, useNoteQuiz } from './components/Quiz';
 import { QuizPanel } from './components/QuizPanel';
 import { SetupBar } from './components/SetupBar';
 import { player } from './audio/player';
+import { mod, noteName } from './music/notes';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 import { deriveView } from './state/derive';
 import type { AppState, ColorMode } from './state/appState';
@@ -57,6 +59,15 @@ export default function App() {
     () => deriveView(state, session, playbackVoicing),
     [state, session, playbackVoicing],
   );
+  const noteQuiz = useNoteQuiz({
+    enabled: state.noteQuiz.enabled,
+    settings: state.noteQuiz,
+    grid: derived.grid,
+    shift: derived.shift,
+    musicalKey: { rootPc: state.rootPc, intervals: derived.intervals },
+  });
+  const showFretboard =
+    state.noteQuiz.enabled || state.instrumentView === 'fretboard' || state.instrumentView === 'both';
 
   return (
     <div className="app">
@@ -159,7 +170,7 @@ export default function App() {
       />
 
       <div className="instrument-views">
-        {(state.instrumentView === 'fretboard' || state.instrumentView === 'both') && (
+        {showFretboard && (
           <Fretboard
             grid={derived.grid}
             tuning={state.tuning}
@@ -188,9 +199,25 @@ export default function App() {
             }
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
+            practice={noteQuiz.practice}
           />
         )}
-        {state.viewMode === 'quiz' && state.quiz.question && (
+        {state.noteQuiz.enabled && (
+          <Quiz
+            api={noteQuiz}
+            settings={state.noteQuiz}
+            numStrings={state.numStrings}
+            fretCount={state.fretCount}
+            neckFrom={state.fretFrom}
+            neckTo={Math.min(state.fretTo, state.fretCount)}
+            shift={derived.shift}
+            musicalKey={{ rootPc: state.rootPc, intervals: derived.intervals }}
+            stringLabels={state.tuning.map((item) => noteName(mod(item.pc + derived.shift, 12)))}
+            keyLabel={`${noteName(mod(state.rootPc + derived.shift, 12))} ${derived.mode.name}`}
+            onSettings={(next) => update({ noteQuiz: next })}
+          />
+        )}
+        {state.viewMode === 'quiz' && state.quiz.question && !state.noteQuiz.enabled && (
           <QuizPanel
             prompt={state.quiz.question.prompt}
             score={state.quiz.score}

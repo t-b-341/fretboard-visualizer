@@ -1,4 +1,4 @@
-import type { AppState } from '../state/appState';
+import { fitNoteQuiz, type AppState } from '../state/appState';
 import type { FamilyDef, FamilyKey, ModeDef } from '../music/scales';
 import { SCALE_FAMILIES, parentScale } from '../music/scales';
 import { getAllDiatonicTriads, qualitySuffix } from '../music/chords';
@@ -188,6 +188,7 @@ export function Controls(props: Props) {
                 fretTo: Math.min(state.fretTo, v),
                 fretFrom: Math.min(state.fretFrom, v),
                 positionWindow: { ...state.positionWindow, min, max },
+                noteQuiz: fitNoteQuiz(state.noteQuiz, state.numStrings, v),
               });
             }}
           />
@@ -585,6 +586,7 @@ export function Controls(props: Props) {
         )}
         <div className="field">
           <label>View</label>
+          <div className="row">
           <div className="segmented" role="group" aria-label="View mode">
             <button
               className={state.viewMode === 'scale' ? 'active' : ''}
@@ -616,6 +618,17 @@ export function Controls(props: Props) {
             >
               Quiz
             </button>
+          </div>
+          <div className="segmented" role="group" aria-label="Note quiz">
+            <button
+              type="button"
+              className={state.noteQuiz.enabled ? 'active' : ''}
+              aria-pressed={state.noteQuiz.enabled}
+              onClick={() => onUpdate({ noteQuiz: { ...state.noteQuiz, enabled: !state.noteQuiz.enabled } })}
+            >
+              Note quiz
+            </button>
+          </div>
           </div>
         </div>
         {state.viewMode === 'chord' && (
