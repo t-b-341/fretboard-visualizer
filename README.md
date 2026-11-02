@@ -22,6 +22,7 @@ scales, modes, and diatonic triads, built for half-step-down tuning.
 - **Concert vs Standard labeling:** Standard shifts displayed note names up a semitone so
   shapes read like standard tuning; the physical fret positions are unchanged.
 - Up to 24 frets with inlay markers.
+- **Shareable links:** the address bar stores the current setup, and Copy link copies that URL.
 
 ## Run it on another computer
 

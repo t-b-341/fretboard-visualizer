@@ -40,6 +40,7 @@ import type { ViewMode, LabelMode, DisplayMode, InstrumentView } from './music/t
 import { player } from './audio/player';
 import { deleteNamed, loadStore, saveLast, saveNamed } from './state/setups';
 import type { NamedSetup } from './state/setups';
+import { decodeState, encodeState } from './urlState';
 
 export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
 export type ColorMode = 'role' | 'degree';
@@ -96,7 +97,7 @@ export interface AppState {
   picked: Record<number, number>;
 }
 
-function createInitialState(): AppState {
+export function createInitialState(): AppState {
   const preset = defaultPresetForStrings(7);
   return {
     numStrings: 7,
@@ -345,7 +346,7 @@ const INVERSIONS = ['Root position', '1st inversion', '2nd inversion', '3rd inve
 
 export default function App() {
   const [boot] = useState(readBoot);
-  const [state, setState] = useState<AppState>(boot.app);
+  const [state, setState] = useState<AppState>(() => decodeState(window.location.search, createInitialState()));
   const [playbackVoicing, setPlaybackVoicing] = useState<Voicing | null>(null);
   const [named, setNamed] = useState<NamedSetup[]>(boot.named);
   const [session, setSession] = useState<ProgressionSnapshot>(boot.progression);
@@ -360,6 +361,14 @@ export default function App() {
   useEffect(() => {
     const t = window.setTimeout(() => saveLast(stateRef.current, progRef.current), 250);
     return () => window.clearTimeout(t);
+  }, [state]);
+
+  useEffect(() => {
+    const query = encodeState(state, createInitialState());
+    const next = new URL(window.location.href);
+    next.search = query;
+    if (next.search === window.location.search) return;
+    window.history.replaceState(window.history.state, '', next.href);
   }, [state]);
 
   const onSessionChange = (snap: ProgressionSnapshot) => {

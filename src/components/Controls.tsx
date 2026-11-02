@@ -10,6 +10,33 @@ import type { NeckShape, ShapeMode } from '../music/shapes';
 import { notesPerString } from '../music/shapes';
 import { voicingStringSets } from '../music/voicings';
 
+function copyPageLink() {
+  const href = window.location.href;
+  const write = navigator.clipboard?.writeText;
+  if (write) {
+    void write.call(navigator.clipboard, href).catch(() => writeTextFallback(href));
+    return;
+  }
+  writeTextFallback(href);
+}
+
+function writeTextFallback(text: string) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand('copy');
+  } catch {
+    // Clipboard is unavailable; the address bar still holds the link.
+  } finally {
+    area.remove();
+  }
+}
+
 interface Props {
   state: AppState;
   family: FamilyDef;
@@ -164,6 +191,11 @@ export function Controls(props: Props) {
               });
             }}
           />
+        </div>
+        <div className="segmented">
+          <button type="button" onClick={copyPageLink}>
+            Copy link
+          </button>
         </div>
       </div>
 
