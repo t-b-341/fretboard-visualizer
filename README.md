@@ -62,7 +62,14 @@ Open the localhost URL Vite prints.
 
 ## Project layout
 
-- `src/music` holds scales, chords, voicings, voice leading, quiz, identify, tunings, and the fretboard grid.
-- `src/audio` holds the built-in synth, Web MIDI output, playback, and `.mid` export.
-- `src/components` holds the fretboard, keyboard, controls, progression bar, and sound controls.
-- `src/state` holds the last session and named setups in `localStorage`.
+| File | What it holds |
+| --- | --- |
+| `src/App.tsx` | Page composition: the state hook, derived values, and the views |
+| `src/state/useAppState.ts` | Saved UI state, its setters, and save/restore |
+| `src/state/appState.ts` | `AppState` shape, defaults, and the localStorage merge |
+| `src/state/derive.ts` | Scale intervals, pitch-class index, spelling, active chord, highlight evaluator, and voicings |
+| `src/state/setups.ts` | Last session and named setups in `localStorage` (`fretboard-visualizer:setups:v1`) |
+| `src/components` | Fretboard, keyboard, controls, legend, progression bar, sound controls, and the setup, formula, quiz, and identify panels |
+| `src/music` | Scales, chords, voicings, voice leading, quiz, identify, tunings, and the fretboard grid |
+| `src/audio` | Built-in synth, Web MIDI output, playback, and `.mid` export |
+| `src/urlState.ts` | Address-bar encoding of the neck setup |

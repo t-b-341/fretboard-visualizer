@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
-import type { Chord, Triad } from '../music/chords';
-import type { DisplayMode, ViewMode } from '../music/types';
+import type { Chord } from '../music/chords';
+import type { ViewMode } from '../music/types';
 import { mod, noteName } from '../music/notes';
-import { createEvaluator, noteFillClass, noteTextClass } from '../music/highlight';
+import { noteFillClass, noteTextClass } from '../music/highlight';
 import { guideTonePcs, placeGuideVoices } from '../music/guide';
 import type { GuidePoint } from '../music/guide';
+import type { HighlightEvaluator } from '../state/derive';
 
 interface CellRef {
   stringIndex: number;
@@ -24,27 +25,18 @@ interface Props {
   /** Cells to keep when a position box or voicing is active. Null shows every lit note. */
   onlyCells: CellRef[] | null;
   guideTones: boolean;
-  rootPc: number;
-  intervals: number[];
-  pcToIndex: Map<number, number>;
   viewMode: ViewMode;
-  triad: Triad;
   activeChord: Chord | null;
-  displayMode: DisplayMode;
   shift: number;
-  ghostScale: boolean;
   compareEnabled: boolean;
-  comparePcSet: Set<number>;
-  compareRootPc: number;
-  sharedOnly: boolean;
   colorByDegree: boolean;
   clickToHear: boolean;
   onPlay: (midi: number) => void;
   caption?: string | null;
-  /** Spelled note names keyed by displayed pitch class. */
-  spelling?: ReadonlyMap<number, string> | null;
   /** Pitch classes of this chord's guide tones, when that overlay is on. */
   guidePcs?: Set<number> | null;
+  /** Pitch-class highlight. Quiz and identify pass per-cell options. */
+  evaluate: HighlightEvaluator;
   /** Inclusive frets drawn at full strength. Notes outside stay visible, dimmed. */
   window?: { min: number; max: number };
   /**
@@ -52,12 +44,8 @@ interface Props {
    * Every other cell is a ghost scale tone, or nothing.
    */
   activeCells?: Set<string>;
-  /** MIDI of the lowest picked note, so identify view can paint it as the root. */
-  identifyBassMidi?: number;
   /** Identify view: pick or clear the note at this string and fret. */
   onPick?: (stringIndex: number, fret: number) => void;
-  /** Quiz view: "stringIndex:fret" cells already marked right or wrong. */
-  quizMarks?: Record<string, 'right' | 'wrong'>;
   /** Quiz view: answer the tone at this string and fret. */
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
 }
@@ -85,30 +73,19 @@ export function Fretboard(props: Props) {
     leftHanded,
     onlyCells,
     guideTones,
-    rootPc,
-    intervals,
-    pcToIndex,
     viewMode,
-    triad,
     activeChord,
-    displayMode,
     shift,
-    ghostScale,
     compareEnabled,
-    comparePcSet,
-    compareRootPc,
-    sharedOnly,
     colorByDegree,
     clickToHear,
     onPlay,
     caption,
-    spelling,
     guidePcs,
     activeCells,
-    identifyBassMidi,
     onPick,
-    quizMarks,
     onQuizAnswer,
+    evaluate,
     window: positionWindow,
   } = props;
 
@@ -146,25 +123,6 @@ export function Fretboard(props: Props) {
   // Mirror x so the nut sits on the right. Text is drawn unflipped at the new x.
   const X = (x: number) => (leftHanded ? width - x : x);
   const rectX = (x: number, w: number) => (leftHanded ? width - x - w : x);
-
-  const evaluate = createEvaluator({
-    rootPc,
-    intervals,
-    pcToIndex,
-    viewMode,
-    triad,
-    activeChord,
-    displayMode,
-    shift,
-    ghostScale,
-    compareEnabled,
-    comparePcSet,
-    compareRootPc,
-    sharedOnly,
-    spelling,
-    identifyBassMidi,
-    quizMarks,
-  });
 
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const guideActive = guideTones && viewMode === 'chord' && !!activeChord;

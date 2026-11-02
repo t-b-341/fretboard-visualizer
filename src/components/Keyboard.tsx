@@ -1,41 +1,22 @@
-import type { Chord, Triad } from '../music/chords';
-import type { DisplayMode, ViewMode } from '../music/types';
-import { createEvaluator, noteFillClass, noteTextClass, type NoteHighlight } from '../music/highlight';
+import type { ViewMode } from '../music/types';
+import { noteFillClass, noteTextClass, type NoteHighlight } from '../music/highlight';
 import { guideForWindow, keyboardWindow } from '../music/keys';
 import { pitchName } from '../music/notes';
 
 interface Props {
   /** How many octaves of keys to draw. 3 is a 37-key controller (C to C). */
   octaves: 1 | 2 | 3;
-  rootPc: number;
-  intervals: number[];
-  pcToIndex: Map<number, number>;
   viewMode: ViewMode;
-  triad: Triad;
-  activeChord: Chord | null;
-  displayMode: DisplayMode;
-  shift: number;
-  ghostScale: boolean;
   compareEnabled: boolean;
-  comparePcSet: Set<number>;
-  compareRootPc: number;
-  sharedOnly: boolean;
-  /** Pitch classes to keep. Null shows the usual highlighting. */
-  restrictPcs: Set<number> | null;
   colorByDegree: boolean;
   clickToHear: boolean;
-  /** Spelled note names keyed by displayed pitch class. */
-  spelling?: ReadonlyMap<number, string> | null;
   /** Pitch classes of this chord's guide tones, when that overlay is on. */
   guidePcs?: Set<number> | null;
-  /**
-   * When set, only these pitch classes draw as chord tones. Null keeps the
-   * usual highlighting. An empty set draws no chord tones.
-   */
-  voicingPcs?: Set<number> | null;
   /** MIDI note of the lowest C. Octave 4 → 60, the same numbering as the sound bar. */
   lowestMidi: number;
   onPlay: (midi: number) => void;
+  /** Pitch-class highlight. A voicing already limits which chord tones are placed. */
+  evaluate: (pc: number) => NoteHighlight | null;
 }
 
 const WHITE_W = 40;
@@ -61,10 +42,7 @@ const BLACK_KEYS = [
 ];
 
 export function Keyboard(props: Props) {
-  const { octaves, colorByDegree, clickToHear, lowestMidi, onPlay, viewMode, compareEnabled, guidePcs, voicingPcs } = props;
-  const evaluateChord = createEvaluator(props);
-  const evaluate = (pc: number) =>
-    voicingPcs ? evaluateChord(pc, { placed: voicingPcs.has(pc) }) : evaluateChord(pc);
+  const { octaves, colorByDegree, clickToHear, lowestMidi, onPlay, viewMode, compareEnabled, guidePcs, evaluate } = props;
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);

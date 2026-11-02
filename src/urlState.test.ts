@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState } from './App';
-import type { AppState } from './App';
+import { createInitialState } from './state/appState';
+import type { AppState } from './state/appState';
 import { buildChord } from './music/chords';
 import { getPreset } from './music/tunings';
 import { decodeState, encodeState } from './urlState';

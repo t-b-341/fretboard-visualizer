@@ -1,4 +1,4 @@
-import type { AppState } from '../App';
+import type { AppState } from '../state/appState';
 import type { FamilyDef, FamilyKey, ModeDef } from '../music/scales';
 import { SCALE_FAMILIES, parentScale } from '../music/scales';
 import { getAllDiatonicTriads, qualitySuffix } from '../music/chords';

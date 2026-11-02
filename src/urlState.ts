@@ -1,4 +1,4 @@
-import type { AppState } from './App';
+import type { AppState } from './state/appState';
 import type { FamilyKey } from './music/scales';
 import { SCALE_FAMILIES, getFamily } from './music/scales';
 import type { GuitarString } from './music/tunings';
