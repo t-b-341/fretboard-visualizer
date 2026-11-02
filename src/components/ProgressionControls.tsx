@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ProgressionControls.css';
+import { chordColorTitle, classifyChord } from '../music/chordColor';
+import type { ChordClassification } from '../music/chordColor';
 import {
   CHORD_QUALITIES,
   buildChord,
@@ -44,6 +46,8 @@ interface Props {
   diatonicIntervals: number[];
   parentName: string | null;
   guideTones: boolean;
+  /** Color chips and diatonic buttons from the root's degree in the parent scale. */
+  colorChordsByRoot: boolean;
   onGuideTones: (v: boolean) => void;
   /** When enabled, grips stay inside this inclusive fret range. */
   positionWindow: { enabled: boolean; min: number; max: number };
@@ -79,6 +83,12 @@ const QUALITY_GROUPS = (() => {
 })();
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
+
+function chordPaintClass(base: string, painted: ChordClassification | null): string {
+  if (!painted) return base;
+  const degree = painted.degreeIndex === null ? '' : ` chord-deg-${painted.degreeIndex}`;
+  return `${base} chord-colored chord-${painted.status}${degree}`;
+}
 
 function cloneWeights(w: Weights): Weights {
   return { ...w, roleMotion: { ...w.roleMotion } };
@@ -132,6 +142,7 @@ export function ProgressionControls(props: Props) {
     diatonicIntervals,
     parentName,
     guideTones,
+    colorChordsByRoot,
     onGuideTones,
     positionWindow,
     session,
@@ -419,11 +430,19 @@ export function ProgressionControls(props: Props) {
           Diatonic
         </span>
         <div className="btn-row">
-          {diatonicChords.map((ch, d) => (
-            <button key={d} className="btn-mini" title={chordSymbol(ch, shift)} onClick={() => addChord(ch)}>
-              {romanForChord(rootPc, ch)}
-            </button>
-          ))}
+          {diatonicChords.map((ch, d) => {
+            const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
+            return (
+              <button
+                key={d}
+                className={chordPaintClass('btn-mini', painted)}
+                title={painted ? chordColorTitle(ch, rootPc, intervals) : chordSymbol(ch, shift)}
+                onClick={() => addChord(ch)}
+              >
+                {romanForChord(rootPc, ch)}
+              </button>
+            );
+          })}
         </div>
         <label className="checkbox-row">
           <input type="checkbox" checked={useSevenths} onChange={(e) => setUseSevenths(e.target.checked)} /> 7th
@@ -459,9 +478,10 @@ export function ProgressionControls(props: Props) {
           <span className="muted">No chords yet &mdash; add some above or generate a progression.</span>
         )}
         {progression.map((ch, i) => {
-          const out = !chordInKey(scalePcs, ch);
+          const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
+          const out = !painted && !chordInKey(scalePcs, ch);
           const cls = [
-            'prog-chip',
+            chordPaintClass('prog-chip', painted),
             i === playIndex ? 'playing' : '',
             i === selectedIdx && !playing ? 'selected' : '',
             out ? 'out' : '',
@@ -473,7 +493,7 @@ export function ProgressionControls(props: Props) {
               <button
                 className="prog-chip-main"
                 onClick={() => preview(ch)}
-                title={out ? 'Outside the key' : 'In key'}
+                title={painted ? chordColorTitle(ch, rootPc, intervals) : out ? 'Outside the key' : 'In key'}
               >
                 <span className="prog-chip-symbol">{chordSymbol(ch, shift)}</span>
                 <span className="prog-chip-roman">{romanForChord(rootPc, ch)}</span>

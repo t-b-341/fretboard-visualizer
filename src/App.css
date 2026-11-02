@@ -371,6 +371,14 @@ input:focus {
 .swatch-overlayOnly {
   background: var(--overlay);
 }
+.swatch-borrowed {
+  background: var(--deg-5);
+  border: 2px dashed var(--root);
+}
+.swatch-chord-outside {
+  background: var(--chord-outside);
+  border: 2px solid #c5cdd6;
+}
 .legend-chord {
   font-size: 14px;
   color: var(--text);

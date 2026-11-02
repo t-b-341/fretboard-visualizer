@@ -136,6 +136,7 @@ export default function App() {
         diatonicIntervals={derived.diatonic.intervals}
         parentName={derived.diatonic.name}
         guideTones={state.guideTones}
+        colorChordsByRoot={state.colorChordsByRoot}
         onGuideTones={(guideTones) => update({ guideTones })}
         positionWindow={state.positionWindow}
         session={session}
@@ -236,6 +237,7 @@ export default function App() {
         activeChordRoman={derived.activeChordRoman}
         activeChordInKey={derived.activeChordInKey}
         colorByDegree={derived.colorByDegree}
+        colorChordsByRoot={state.colorChordsByRoot}
         degreeLabels={derived.degreeLabels}
         guideTones={derived.guideActive}
       />

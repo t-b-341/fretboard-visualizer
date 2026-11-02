@@ -56,6 +56,8 @@ export interface AppState {
   shapeMode: ShapeMode;
   shapeIndex: number;
   colorMode: ColorMode;
+  /** Color progression chips and diatonic buttons by the root's scale degree. */
+  colorChordsByRoot: boolean;
   voicingStyle: VoicingStyle;
   voicingInversion: number;
   voicingWidth: 3 | 4;
@@ -112,6 +114,7 @@ export function createInitialState(): AppState {
     shapeMode: 'all',
     shapeIndex: 0,
     colorMode: 'role',
+    colorChordsByRoot: true,
     voicingStyle: 'all',
     voicingInversion: 0,
     voicingWidth: 3,
@@ -282,6 +285,7 @@ export function mergeApp(raw: unknown): AppState {
     shapeMode: raw.shapeMode === 'nps' || raw.shapeMode === 'caged' ? raw.shapeMode : 'all',
     shapeIndex: clampNum(raw.shapeIndex, 0, 24, 0),
     colorMode: raw.colorMode === 'degree' ? 'degree' : 'role',
+    colorChordsByRoot: raw.colorChordsByRoot !== false,
     voicingStyle: raw.voicingStyle === 'close' || raw.voicingStyle === 'drop2' ? raw.voicingStyle : 'all',
     voicingInversion: clampNum(raw.voicingInversion, 0, 3, 0),
     voicingWidth,

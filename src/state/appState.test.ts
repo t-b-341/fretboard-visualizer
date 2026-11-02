@@ -18,6 +18,12 @@ describe('mergeApp', () => {
     expect(chosen.keyboardSpanChosen).toBe(true);
   });
 
+  it('colors chords by root unless a saved setup turns it off', () => {
+    expect(mergeApp({ rootPc: 0 }).colorChordsByRoot).toBe(true);
+    expect(mergeApp({ colorChordsByRoot: false }).colorChordsByRoot).toBe(false);
+    expect(createInitialState().colorChordsByRoot).toBe(true);
+  });
+
   it('rebuilds a saved chord from its quality key', () => {
     const loaded = mergeApp({ activeChord: { rootPc: 10, quality: '7' } });
     expect(loaded.activeChord).toEqual(buildChord(10, '7'));

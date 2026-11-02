@@ -732,19 +732,29 @@ export function Controls(props: Props) {
         </div>
         <div className="field">
           <label>Color</label>
-          <div className="segmented" role="group" aria-label="Note color">
-            <button
-              className={state.colorMode === 'role' ? 'active' : ''}
-              onClick={() => onUpdate({ colorMode: 'role' })}
-            >
-              Role
-            </button>
-            <button
-              className={state.colorMode === 'degree' ? 'active' : ''}
-              onClick={() => onUpdate({ colorMode: 'degree' })}
-            >
-              Degree
-            </button>
+          <div className="row">
+            <div className="segmented" role="group" aria-label="Note color">
+              <button
+                className={state.colorMode === 'role' ? 'active' : ''}
+                onClick={() => onUpdate({ colorMode: 'role' })}
+              >
+                Role
+              </button>
+              <button
+                className={state.colorMode === 'degree' ? 'active' : ''}
+                onClick={() => onUpdate({ colorMode: 'degree' })}
+              >
+                Degree
+              </button>
+            </div>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={state.colorChordsByRoot}
+                onChange={(e) => onUpdate({ colorChordsByRoot: e.target.checked })}
+              />
+              Color chords by root
+            </label>
           </div>
         </div>
       </div>
