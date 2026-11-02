@@ -95,11 +95,15 @@ function nearestUnused(note: VoicedNote, other: VoicedNote[], used: Set<number>)
   return best;
 }
 
+function noteRole(note: VoicedNote): ChordToneRole {
+  return note.role ?? 'ext';
+}
+
 /** Seventh falls 1 or 2 semitones onto a third. Third rises 1 semitone onto a root. */
 function resolves(from: VoicedNote, to: VoicedNote): boolean {
   const rise = to.midi - from.midi;
-  if (from.role === 'seventh' && to.role === 'third') return rise === -1 || rise === -2;
-  if (from.role === 'third' && to.role === 'root') return rise === 1;
+  if (noteRole(from) === 'seventh' && noteRole(to) === 'third') return rise === -1 || rise === -2;
+  if (noteRole(from) === 'third' && noteRole(to) === 'root') return rise === 1;
   return false;
 }
 
@@ -129,11 +133,11 @@ export function transitionCost(a: Voicing, b: Voicing, w: Weights = DEFAULT_WEIG
   const { pairs, unpaired } = pairVoices(a.notes, b.notes);
   let cost = 0;
   for (const { from, to } of pairs) {
-    cost += Math.abs(to.midi - from.midi) * w.roleMotion[from.role];
+    cost += Math.abs(to.midi - from.midi) * w.roleMotion[noteRole(from)];
     if (resolves(from, to)) cost -= w.resolutionBonus;
   }
   for (const note of unpaired) {
-    cost += w.omissionPenalty * w.roleMotion[note.role];
+    cost += w.omissionPenalty * w.roleMotion[noteRole(note)];
   }
   if (!isAllOpen(a) && !isAllOpen(b)) {
     cost += Math.abs(b.minFret - a.minFret) * w.handShift;

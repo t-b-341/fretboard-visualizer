@@ -17,8 +17,8 @@ export interface VoicedNote {
   fret: number;
   midi: number;
   pc: number;
-  role: ChordToneRole;
-  degree: string;
+  role?: ChordToneRole;
+  degree?: string;
 }
 
 interface VoiceTone {
@@ -209,6 +209,31 @@ export interface Voicing {
   maxFret: number;
   /** maxFret - minFret across fretted notes. */
   span: number;
+}
+
+/** Pack sounding notes into a grip. Open strings (fret 0) do not set minFret, maxFret, or span. */
+export function toVoicing(notes: VoicedNote[], stringCount: number): Voicing {
+  const frets: (number | null)[] = new Array(stringCount).fill(null);
+  let minFret = 0;
+  let maxFret = 0;
+  let fretted = false;
+  for (const note of notes) {
+    if (note.stringIndex >= 0 && note.stringIndex < stringCount) {
+      frets[note.stringIndex] = note.fret;
+    }
+    if (note.fret > 0) {
+      if (!fretted || note.fret < minFret) minFret = note.fret;
+      if (!fretted || note.fret > maxFret) maxFret = note.fret;
+      fretted = true;
+    }
+  }
+  return {
+    frets,
+    notes: [...notes].sort((a, b) => a.midi - b.midi || a.stringIndex - b.stringIndex),
+    minFret,
+    maxFret,
+    span: maxFret - minFret,
+  };
 }
 
 export interface VoicingOptions {

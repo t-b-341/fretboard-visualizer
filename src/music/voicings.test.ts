@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildChord } from './chords';
+import { mod } from './notes';
 import { getPreset } from './tunings';
-import { generateVoicings, type Voicing } from './voicings';
+import { findVoicings, generateVoicings, toVoicing, type Voicing } from './voicings';
 
 const standard7 = getPreset('7-standard')!.notes;
 const halfDown7 = getPreset('7-half-down')!.notes;
@@ -14,6 +15,79 @@ function assertMidiSorted(voicing: Voicing): void {
     expect(voicing.notes[i].midi).toBeGreaterThanOrEqual(voicing.notes[i - 1].midi);
   }
 }
+
+describe('findVoicings', () => {
+  it('labels Cmaj7 drop-2 notes with the chord roles on 7-standard', () => {
+    const chord = buildChord(0, 'maj7');
+    const byPc = new Map(
+      chord.tones.map((tone) => [mod(chord.rootPc + tone.interval, 12), tone]),
+    );
+    const grips = findVoicings(standard7, 12, chord, 'drop2', 0, 1, 4);
+    const grip = grips.find((notes) => notes.map((n) => n.fret).join(',') === '8,10,9,9');
+    expect(grip?.map((n) => n.role)).toEqual(['root', 'fifth', 'seventh', 'third']);
+    expect(grip?.map((n) => n.degree)).toEqual(['1', '5', '7', '3']);
+
+    const all = [];
+    for (let inversion = 0; inversion < 4; inversion++) {
+      for (let start = 0; start + 4 <= standard7.length; start++) {
+        all.push(...findVoicings(standard7, 12, chord, 'drop2', inversion, start, 4));
+      }
+    }
+    expect(all.length).toBeGreaterThan(0);
+    for (const notes of all) {
+      for (const sounded of notes) {
+        const tone = byPc.get(sounded.pc);
+        expect(tone).toBeDefined();
+        expect(sounded.role).toBe(tone?.role);
+        expect(sounded.degree).toBe(tone?.degree);
+      }
+    }
+  });
+});
+
+describe('toVoicing', () => {
+  it('computes minFret and span from fretted notes, with and without open strings', () => {
+    const closed = toVoicing(
+      [
+        { stringIndex: 4, fret: 7, midi: 62, pc: 2 },
+        { stringIndex: 2, fret: 3, midi: 48, pc: 0 },
+        { stringIndex: 3, fret: 5, midi: 55, pc: 7 },
+      ],
+      7,
+    );
+    expect(closed.frets).toEqual([null, null, 3, 5, 7, null, null]);
+    expect(closed.notes.map((n) => n.midi)).toEqual([48, 55, 62]);
+    expect(closed.minFret).toBe(3);
+    expect(closed.maxFret).toBe(7);
+    expect(closed.span).toBe(4);
+
+    const withOpen = toVoicing(
+      [
+        { stringIndex: 5, fret: 8, midi: 67, pc: 7 },
+        { stringIndex: 1, fret: 0, midi: 40, pc: 4 },
+        { stringIndex: 3, fret: 5, midi: 55, pc: 7 },
+      ],
+      7,
+    );
+    expect(withOpen.frets).toEqual([null, 0, null, 5, null, 8, null]);
+    expect(withOpen.notes.map((n) => n.fret)).toEqual([0, 5, 8]);
+    expect(withOpen.minFret).toBe(5);
+    expect(withOpen.maxFret).toBe(8);
+    expect(withOpen.span).toBe(3);
+
+    const allOpen = toVoicing(
+      [
+        { stringIndex: 4, fret: 0, midi: 55, pc: 7 },
+        { stringIndex: 1, fret: 0, midi: 40, pc: 4 },
+      ],
+      7,
+    );
+    expect(allOpen.minFret).toBe(0);
+    expect(allOpen.maxFret).toBe(0);
+    expect(allOpen.span).toBe(0);
+    expect(allOpen.notes.map((n) => n.stringIndex)).toEqual([1, 4]);
+  });
+});
 
 describe('generateVoicings', () => {
   it('returns C major voicings whose pitch classes are the triad', () => {
