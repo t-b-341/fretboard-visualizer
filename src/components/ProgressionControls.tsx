@@ -45,6 +45,8 @@ interface Props {
   parentName: string | null;
   guideTones: boolean;
   onGuideTones: (v: boolean) => void;
+  /** When enabled, grips stay inside this inclusive fret range. */
+  positionWindow: { enabled: boolean; min: number; max: number };
   /** Restored session. Applied on mount, and again whenever loadId changes. */
   session: ProgressionSnapshot;
   loadId: number;
@@ -131,6 +133,7 @@ export function ProgressionControls(props: Props) {
     parentName,
     guideTones,
     onGuideTones,
+    positionWindow,
     session,
     loadId,
     onSessionChange,
@@ -234,13 +237,26 @@ export function ProgressionControls(props: Props) {
   const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
+  const fretRange = useMemo<[number, number] | undefined>(
+    () => (positionWindow.enabled ? [positionWindow.min, positionWindow.max] : undefined),
+    [positionWindow.enabled, positionWindow.min, positionWindow.max],
+  );
+  const allowOpen = positionWindow.enabled ? positionWindow.min === 0 : undefined;
   const lead = useMemo(() => {
     try {
-      return { path: leadProgression(progression, tuning, weights), error: null as string | null };
+      return {
+        path: leadProgression(
+          progression,
+          tuning,
+          weights,
+          fretRange ? { fretRange, allowOpen } : undefined,
+        ),
+        error: null as string | null,
+      };
     } catch (err) {
       return { path: null as Voicing[] | null, error: err instanceof Error ? err.message : String(err) };
     }
-  }, [progression, tuning, weights]);
+  }, [progression, tuning, weights, fretRange, allowOpen]);
   const leadRef = useRef(lead);
   leadRef.current = lead;
   const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });

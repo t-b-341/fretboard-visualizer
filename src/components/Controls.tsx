@@ -154,10 +154,13 @@ export function Controls(props: Props) {
             value={state.fretCount}
             onChange={(e) => {
               const v = Math.max(12, Math.min(24, Number(e.target.value) || 24));
+              const min = Math.max(0, Math.min(state.positionWindow.min, v));
+              const max = Math.max(min, Math.min(state.positionWindow.max, v));
               onUpdate({
                 fretCount: v,
                 fretTo: Math.min(state.fretTo, v),
                 fretFrom: Math.min(state.fretFrom, v),
+                positionWindow: { ...state.positionWindow, min, max },
               });
             }}
           />
@@ -208,6 +211,53 @@ export function Controls(props: Props) {
               onChange={(e) => {
                 const v = Math.max(state.fretFrom, Math.min(state.fretCount, Number(e.target.value) || state.fretCount));
                 onUpdate({ fretTo: v });
+              }}
+            />
+          </div>
+        </div>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={state.positionWindow.enabled}
+            onChange={(e) =>
+              onUpdate({ positionWindow: { ...state.positionWindow, enabled: e.target.checked } })
+            }
+          />
+          Position window
+        </label>
+        <div className="row">
+          <div className="field">
+            <label>From</label>
+            <input
+              type="number"
+              min={0}
+              max={state.positionWindow.max}
+              value={state.positionWindow.min}
+              aria-label="Position window from"
+              onChange={(e) => {
+                const v = Math.max(
+                  0,
+                  Math.min(state.positionWindow.max, Math.round(Number(e.target.value)) || 0),
+                );
+                onUpdate({ positionWindow: { ...state.positionWindow, min: v } });
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>To</label>
+            <input
+              type="number"
+              min={state.positionWindow.min}
+              max={state.fretCount}
+              value={state.positionWindow.max}
+              aria-label="Position window to"
+              onChange={(e) => {
+                const raw = Math.round(Number(e.target.value));
+                const v = Math.max(
+                  state.positionWindow.min,
+                  Math.min(state.fretCount, Number.isFinite(raw) ? raw : state.positionWindow.max),
+                );
+                onUpdate({ positionWindow: { ...state.positionWindow, max: v } });
               }}
             />
           </div>

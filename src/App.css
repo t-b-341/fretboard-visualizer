@@ -525,6 +525,9 @@ input:focus {
 .note-hit {
   cursor: pointer;
 }
+.outside-window {
+  opacity: 0.25;
+}
 .note-target {
   fill: transparent;
 }

@@ -45,6 +45,8 @@ interface Props {
   spelling?: ReadonlyMap<number, string> | null;
   /** Pitch classes of this chord's guide tones, when that overlay is on. */
   guidePcs?: Set<number> | null;
+  /** Inclusive frets drawn at full strength. Notes outside stay visible, dimmed. */
+  window?: { min: number; max: number };
   /**
    * When set, only these "stringIndex:fret" cells draw as chord tones.
    * Every other cell is a ghost scale tone, or nothing.
@@ -95,6 +97,7 @@ export function Fretboard(props: Props) {
     spelling,
     guidePcs,
     activeCells,
+    window: positionWindow,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -200,6 +203,12 @@ export function Fretboard(props: Props) {
 
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);
+  };
+
+  const noteClass = (fret: number) => {
+    const outside =
+      positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
+    return [clickToHear ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
 
   return (
@@ -314,7 +323,7 @@ export function Fretboard(props: Props) {
               const key = `n-${cell.stringIndex}-${cell.fret}`;
               if (ev.role === 'ghost') {
                 return (
-                  <g key={key} className={clickToHear ? 'note-hit' : undefined} onClick={() => play(cell.midi)}>
+                  <g key={key} className={noteClass(cell.fret)} onClick={() => play(cell.midi)}>
                     <circle className="note-ghost" cx={x} cy={y} r={4.5} />
                     {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
                   </g>
@@ -323,7 +332,7 @@ export function Fretboard(props: Props) {
               return (
                 <g
                   key={key}
-                  className={clickToHear ? 'note-hit' : undefined}
+                  className={noteClass(cell.fret)}
                   onClick={() => play(cell.midi)}
                 >
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />

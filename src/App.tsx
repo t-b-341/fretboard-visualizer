@@ -88,6 +88,8 @@ export interface AppState {
   compareFamilyKey: FamilyKey;
   compareModeKey: string;
   sharedOnly: boolean;
+  /** Inclusive fret range for grips. Open strings are allowed only when min is 0. */
+  positionWindow: { enabled: boolean; min: number; max: number };
 }
 
 function createInitialState(): AppState {
@@ -133,6 +135,7 @@ function createInitialState(): AppState {
     compareFamilyKey: 'major',
     compareModeKey: 'Aeolian', // parallel natural minor by default
     sharedOnly: false,
+    positionWindow: { enabled: false, min: 5, max: 8 },
   };
 }
 
@@ -156,6 +159,14 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : fallback;
   return Math.max(lo, Math.min(hi, n));
+}
+
+function readPositionWindow(v: unknown, fretCount: number): AppState['positionWindow'] {
+  const base = { enabled: false, min: 5, max: 8 };
+  if (!isRecord(v)) return base;
+  const min = clampNum(v.min, 0, fretCount, base.min);
+  const max = clampNum(v.max, min, fretCount, base.max);
+  return { enabled: v.enabled === true, min, max };
 }
 
 function controllerBaseOf(v: unknown): ControllerBaseOctave {
@@ -274,6 +285,7 @@ function mergeApp(raw: unknown): AppState {
     compareFamilyKey,
     compareModeKey: modeOf(compareFamilyKey, raw.compareModeKey, base.compareModeKey),
     sharedOnly: raw.sharedOnly === true,
+    positionWindow: readPositionWindow(raw.positionWindow, fretCount),
   };
 }
 
@@ -529,9 +541,22 @@ export default function App() {
 
   const oneVoicing =
     state.viewMode === 'chord' && state.chordDisplay === 'voicing' && state.activeChord !== null;
+  const positionWindow = state.positionWindow;
   const generatedVoicings = useMemo(
-    () => (oneVoicing && state.activeChord ? generateVoicings(state.activeChord, state.tuning) : []),
-    [oneVoicing, state.activeChord, state.tuning],
+    () =>
+      oneVoicing && state.activeChord
+        ? generateVoicings(
+            state.activeChord,
+            state.tuning,
+            positionWindow.enabled
+              ? {
+                  fretRange: [positionWindow.min, positionWindow.max],
+                  allowOpen: positionWindow.min === 0,
+                }
+              : undefined,
+          )
+        : [],
+    [oneVoicing, state.activeChord, state.tuning, positionWindow],
   );
   const voicingCount = generatedVoicings.length;
   const voicingIndex = voicingCount === 0 ? 0 : Math.min(state.voicingIndex, voicingCount - 1);
@@ -791,6 +816,7 @@ export default function App() {
         parentName={diatonic.name}
         guideTones={state.guideTones}
         onGuideTones={(guideTones) => update({ guideTones })}
+        positionWindow={state.positionWindow}
         session={session}
         loadId={loadId}
         onSessionChange={onSessionChange}
@@ -884,6 +910,11 @@ export default function App() {
             spelling={spelling}
             guidePcs={guidePcs}
             activeCells={activeCells}
+            window={
+              state.positionWindow.enabled
+                ? { min: state.positionWindow.min, max: state.positionWindow.max }
+                : undefined
+            }
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
           />
