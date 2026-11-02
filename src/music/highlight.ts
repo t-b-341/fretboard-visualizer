@@ -5,7 +5,7 @@
 // Keeping that answer in one place guarantees a given note looks identical no
 // matter which diagram it is drawn on.
 
-import type { DisplayMode, ViewMode } from '../App';
+import type { DisplayMode, ViewMode } from './types';
 import type { Chord, Triad } from './chords';
 import { chromaticDegreeLabel, mod, noteName } from './notes';
 import { scaleDegreeLabel } from './scales';
@@ -63,7 +63,9 @@ export interface HighlightContext {
  * function that, given a pitch class (0-11), yields how that note should be
  * drawn, or `null` when it should not be shown at all.
  */
-export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHighlight | null {
+export function createEvaluator(
+  ctx: HighlightContext,
+): (pc: number, opts?: { placed?: boolean }) => NoteHighlight | null {
   const {
     rootPc,
     intervals,
@@ -95,7 +97,7 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
     }
   }
 
-  return function evaluate(pc: number): NoteHighlight | null {
+  return function evaluate(pc: number, opts?: { placed?: boolean }): NoteHighlight | null {
     if (restrictPcs && !restrictPcs.has(pc)) return null;
     const idx = pcToIndex.get(pc);
     const inScale = idx !== undefined;
@@ -137,7 +139,9 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
     // chord-relative degree. Chord tones outside the current key get a dashed
     // ring; remaining key tones can show faintly as ghosts.
     if (viewMode === 'chord') {
-      const role = chordRoleByPc.get(pc);
+      // `placed: false` is a fret or key that is not part of the grip on screen.
+      // The pitch class may still belong to the chord; it falls through to a ghost.
+      const role = opts?.placed === false ? undefined : chordRoleByPc.get(pc);
       if (role) {
         const label = displayMode === 'note' ? named() : chordDegreeByPc.get(pc) ?? '';
         return decorate({
@@ -153,9 +157,11 @@ export function createEvaluator(ctx: HighlightContext): (pc: number) => NoteHigh
 
     // Triad view
     let chordRole: Role | null = null;
-    if (pc === triad.pitches[0]) chordRole = 'root';
-    else if (pc === triad.pitches[1]) chordRole = 'third';
-    else if (pc === triad.pitches[2]) chordRole = 'fifth';
+    if (opts?.placed !== false) {
+      if (pc === triad.pitches[0]) chordRole = 'root';
+      else if (pc === triad.pitches[1]) chordRole = 'third';
+      else if (pc === triad.pitches[2]) chordRole = 'fifth';
+    }
 
     // Compare: overlay a scale on the chord. Chord tones keep their colours; the
     // scale's remaining notes show as colour tones. Everything is labelled

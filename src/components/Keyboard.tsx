@@ -1,5 +1,5 @@
 import type { Chord, Triad } from '../music/chords';
-import type { DisplayMode, ViewMode } from '../App';
+import type { DisplayMode, ViewMode } from '../music/types';
 import { createEvaluator, noteFillClass, noteTextClass, type NoteHighlight } from '../music/highlight';
 import { guideForWindow, keyboardWindow } from '../music/keys';
 import { pitchName } from '../music/notes';
@@ -28,6 +28,11 @@ interface Props {
   spelling?: ReadonlyMap<number, string> | null;
   /** Pitch classes of this chord's guide tones, when that overlay is on. */
   guidePcs?: Set<number> | null;
+  /**
+   * When set, only these pitch classes draw as chord tones. Null keeps the
+   * usual highlighting. An empty set draws no chord tones.
+   */
+  voicingPcs?: Set<number> | null;
   /** MIDI note of the lowest C. Octave 4 → 60, the same numbering as the sound bar. */
   lowestMidi: number;
   onPlay: (midi: number) => void;
@@ -56,8 +61,10 @@ const BLACK_KEYS = [
 ];
 
 export function Keyboard(props: Props) {
-  const { octaves, colorByDegree, clickToHear, lowestMidi, onPlay, viewMode, compareEnabled, guidePcs } = props;
-  const evaluate = createEvaluator(props);
+  const { octaves, colorByDegree, clickToHear, lowestMidi, onPlay, viewMode, compareEnabled, guidePcs, voicingPcs } = props;
+  const evaluateChord = createEvaluator(props);
+  const evaluate = (pc: number) =>
+    voicingPcs ? evaluateChord(pc, { placed: voicingPcs.has(pc) }) : evaluateChord(pc);
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);

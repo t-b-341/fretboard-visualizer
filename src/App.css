@@ -107,6 +107,13 @@ input:focus {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.voicing-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
 
 /* Per-string tuning editor */
 .tuning-editor {

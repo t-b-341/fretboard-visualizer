@@ -30,6 +30,10 @@ interface Props {
   /** How many tones the current voicing can use (3 for a triad, 4 when a 7th is available). */
   voicingToneCount: number;
   onShape: (mode: ShapeMode, index: number) => void;
+  /** Generated grips for the chord on screen. Used by the one-voicing stepper. */
+  voicingCount: number;
+  voicingIndex: number;
+  onPlayVoicing: () => void;
 }
 
 export function Controls(props: Props) {
@@ -52,6 +56,9 @@ export function Controls(props: Props) {
     cagedShapes,
     voicingToneCount,
     onShape,
+    voicingCount,
+    voicingIndex,
+    onPlayVoicing,
   } = props;
 
   const controllerRange = controllerWindow(state.controllerBaseOctave, state.controllerOctaveShift);
@@ -517,6 +524,53 @@ export function Controls(props: Props) {
             </button>
           </div>
         </div>
+        {state.viewMode === 'chord' && (
+          <div className="field">
+            <label>On the neck</label>
+            <div className="segmented" role="group" aria-label="Chord display">
+              <button
+                className={state.chordDisplay === 'all' ? 'active' : ''}
+                onClick={() => onUpdate({ chordDisplay: 'all' })}
+              >
+                All tones
+              </button>
+              <button
+                className={state.chordDisplay === 'voicing' ? 'active' : ''}
+                onClick={() => onUpdate({ chordDisplay: 'voicing' })}
+              >
+                One voicing
+              </button>
+            </div>
+            {state.chordDisplay === 'voicing' && (
+              <div className="voicing-picker">
+                {voicingCount === 0 ? (
+                  <span className="muted">No playable voicing</span>
+                ) : (
+                  <div className="segmented" role="group" aria-label="Which voicing">
+                    <button
+                      disabled={voicingIndex <= 0}
+                      onClick={() => onUpdate({ voicingIndex: voicingIndex - 1 })}
+                    >
+                      Prev
+                    </button>
+                    <span className="segment-value">
+                      {voicingIndex + 1} of {voicingCount}
+                    </span>
+                    <button
+                      disabled={voicingIndex >= voicingCount - 1}
+                      onClick={() => onUpdate({ voicingIndex: voicingIndex + 1 })}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+                <button className="btn-mini" disabled={voicingCount === 0} onClick={onPlayVoicing}>
+                  Play voicing
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {state.viewMode === 'triad' && (
           <>
             <div className="field">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './ProgressionControls.css';
 import {
   CHORD_QUALITIES,
@@ -14,6 +14,9 @@ import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
 import { mod, noteName } from '../music/notes';
+import type { GuitarString } from '../music/tunings';
+import { DEFAULT_WEIGHTS, leadProgression } from '../music/voiceLeading';
+import type { Voicing } from '../music/voicings';
 
 interface Props {
   /** Key centre (concert pitch class). */
@@ -24,6 +27,8 @@ interface Props {
   scalePcs: number[];
   /** Label shift (concert vs standard). */
   shift: number;
+  /** Current guitar tuning. Voice leading places grips on these strings. */
+  tuning: GuitarString[];
   /** Whether the chord view is currently active (viewMode === 'chord'). */
   active: boolean;
   /** The chord currently shown on the instruments. */
@@ -31,6 +36,8 @@ interface Props {
   ghostScale: boolean;
   /** Show a chord on the instruments (also switches into chord view). */
   onShowChord: (chord: Chord | null) => void;
+  /** Grip to light during voice-led playback. Null returns the fretboard to the chord display. */
+  onShowVoicing: (v: Voicing | null) => void;
   onGhostScale: (v: boolean) => void;
   /** Heptatonic scale the diatonic buttons are built from (the parent, for pentatonic and similar). */
   diatonicIntervals: number[];
@@ -76,10 +83,12 @@ export function ProgressionControls(props: Props) {
     intervals,
     scalePcs,
     shift,
+    tuning,
     active,
     activeChord,
     ghostScale,
     onShowChord,
+    onShowVoicing,
     onGhostScale,
     diatonicIntervals,
     parentName,
@@ -103,8 +112,13 @@ export function ProgressionControls(props: Props) {
   const [useSevenths, setUseSevenths] = useState(session.useSevenths);
   const [spicy, setSpicy] = useState(session.spicy);
   const [templateId, setTemplateId] = useState(session.templateId);
+  const [voiceLeading, setVoiceLeading] = useState(true);
 
   const timerRef = useRef<number | null>(null);
+  const onShowVoicingRef = useRef(onShowVoicing);
+  onShowVoicingRef.current = onShowVoicing;
+  const voiceLeadingRef = useRef(voiceLeading);
+  voiceLeadingRef.current = voiceLeading;
 
   // Re-render when the MIDI engine's state changes (to reflect readiness).
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
@@ -134,6 +148,7 @@ export function ProgressionControls(props: Props) {
     stopTimer();
     setPlaying(false);
     player.stop();
+    onShowVoicingRef.current(null);
   };
 
   // Replace the working progression when a saved setup is loaded.
@@ -152,6 +167,11 @@ export function ProgressionControls(props: Props) {
     // session is the snapshot captured for this loadId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadId]);
+
+  // A new progression is no longer the one that was just played.
+  useEffect(() => {
+    onShowVoicingRef.current(null);
+  }, [progression]);
 
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
@@ -176,6 +196,15 @@ export function ProgressionControls(props: Props) {
   const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
+  const lead = useMemo(() => {
+    try {
+      return { path: leadProgression(progression, tuning, DEFAULT_WEIGHTS), error: null as string | null };
+    } catch (err) {
+      return { path: null as Voicing[] | null, error: err instanceof Error ? err.message : String(err) };
+    }
+  }, [progression, tuning]);
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
   const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
   const preview = (chord: Chord) => {
     onShowChord(chord);
@@ -224,7 +253,21 @@ export function ProgressionControls(props: Props) {
     const fire = (idx: number) => {
       setPlayIndex(idx);
       onShowChord(chords[idx]);
-      player.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
+      const current = leadRef.current;
+      const grip =
+        voiceLeadingRef.current && current.path && !current.error && current.path.length === chords.length
+          ? current.path[idx]
+          : null;
+      if (grip) {
+        player.playChord(
+          grip.notes.map((n) => n.midi),
+          { durationMs: dur * 0.95 },
+        );
+        onShowVoicingRef.current(grip);
+      } else {
+        player.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
+        onShowVoicingRef.current(null);
+      }
     };
     setPlaying(true);
     fire(0);
@@ -236,6 +279,7 @@ export function ProgressionControls(props: Props) {
         } else {
           stopTimer();
           setPlaying(false);
+          onShowVoicingRef.current(null);
           return;
         }
       }
@@ -248,7 +292,11 @@ export function ProgressionControls(props: Props) {
   const exportMidi = () => {
     if (progression.length === 0) return;
     const keyLabel = noteName(mod(rootPc + shift, 12));
-    const bytes = progressionToSmf(progression.map(voice), {
+    const midiChords =
+      voiceLeading && lead.path && !lead.error
+        ? lead.path.map((v) => v.notes.map((n) => n.midi))
+        : progression.map(voice);
+    const bytes = progressionToSmf(midiChords, {
       bpm: tempo,
       beatsPerChord,
       trackName: `Fretboard progression in ${keyLabel}`,
@@ -419,6 +467,21 @@ export function ProgressionControls(props: Props) {
         <label className="checkbox-row">
           <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} /> Loop
         </label>
+        <label
+          className="checkbox-row"
+          title="Play and export each chord as the next grip in a smooth path. Off uses a root-position stack in the selected octave."
+        >
+          <input
+            type="checkbox"
+            checked={voiceLeading}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setVoiceLeading(on);
+              if (!on) onShowVoicing(null);
+            }}
+          />{' '}
+          Voice leading
+        </label>
         <span className="midi-sep" />
         <button className="btn-mini" onClick={play} disabled={progression.length === 0}>
           &#9654; Play
@@ -446,6 +509,7 @@ export function ProgressionControls(props: Props) {
           <input type="checkbox" checked={guideTones} onChange={(e) => onGuideTones(e.target.checked)} /> Guide tones
         </label>
       </div>
+      {voiceLeading && lead.error && <p className="prog-error">{lead.error}</p>}
     </div>
   );
 }

@@ -25,23 +25,21 @@ import { buildGrid } from './music/fretboard';
 import { chromaticDegreeLabel, labelShift, mod, noteName } from './music/notes';
 import { buildCagedShapes, buildNotePerStringShapes, notesPerString } from './music/shapes';
 import type { ShapeMode } from './music/shapes';
-import { findVoicings, selectVoicingTones, voicingBassRole } from './music/voicings';
+import { findVoicings, generateVoicings, selectVoicingTones, voicingBassRole } from './music/voicings';
 import { pitchSpelling, spellChordTone, spellScale } from './music/spelling';
 import { chordReading, nextInProgression, scaleOrigin, scalePulls, shiftChord } from './music/reading';
 import type { ChoiceNote } from './music/reading';
-import type { VoicingStyle } from './music/voicings';
+import type { Voicing, VoicingStyle } from './music/voicings';
 import { guideTonePcs } from './music/guide';
 import { CONTROLLER_BASE_OCTAVES, clampControllerShift, controllerWindow, cMidi } from './music/keys';
 import type { ControllerBaseOctave } from './music/keys';
 import { PROGRESSION_TEMPLATES } from './music/progression';
+import type { ViewMode, LabelMode, DisplayMode, InstrumentView } from './music/types';
 import { player } from './audio/player';
 import { deleteNamed, loadStore, saveLast, saveNamed } from './state/setups';
 import type { NamedSetup } from './state/setups';
 
-export type ViewMode = 'scale' | 'triad' | 'chord';
-export type LabelMode = 'concert' | 'standard';
-export type DisplayMode = 'note' | 'degree';
-export type InstrumentView = 'fretboard' | 'keyboard' | 'both';
+export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
 export type ColorMode = 'role' | 'degree';
 
 export interface AppState {
@@ -53,6 +51,10 @@ export interface AppState {
   familyKey: FamilyKey;
   modeKey: string;
   viewMode: ViewMode;
+  /** Chord view: every chord tone, or one generated grip. */
+  chordDisplay: 'all' | 'voicing';
+  /** Index into the generated voicing list. Clamped when that list is shorter. */
+  voicingIndex: number;
   triadDegree: number;
   activeChord: Chord | null;
   labelMode: LabelMode;
@@ -99,6 +101,8 @@ function createInitialState(): AppState {
     familyKey: 'major',
     modeKey: 'Ionian',
     viewMode: 'scale',
+    chordDisplay: 'all',
+    voicingIndex: 0,
     triadDegree: 0,
     activeChord: null,
     labelMode: 'concert',
@@ -229,6 +233,8 @@ function mergeApp(raw: unknown): AppState {
     familyKey,
     modeKey: modeOf(familyKey, raw.modeKey, base.modeKey),
     viewMode: raw.viewMode === 'triad' || raw.viewMode === 'chord' ? raw.viewMode : 'scale',
+    chordDisplay: raw.chordDisplay === 'voicing' ? 'voicing' : 'all',
+    voicingIndex: clampNum(raw.voicingIndex, 0, 10000, 0),
     triadDegree: clampNum(raw.triadDegree, 0, 6, 0),
     activeChord: readChord(raw.activeChord),
     labelMode: raw.labelMode === 'standard' ? 'standard' : 'concert',
@@ -307,6 +313,7 @@ const INVERSIONS = ['Root position', '1st inversion', '2nd inversion', '3rd inve
 export default function App() {
   const [boot] = useState(readBoot);
   const [state, setState] = useState<AppState>(boot.app);
+  const [playbackVoicing, setPlaybackVoicing] = useState<Voicing | null>(null);
   const [named, setNamed] = useState<NamedSetup[]>(boot.named);
   const [session, setSession] = useState<ProgressionSnapshot>(boot.progression);
   const [loadId, setLoadId] = useState(0);
@@ -337,6 +344,7 @@ export default function App() {
       tuning: preset.notes.map((x) => ({ ...x })),
       hiddenStrings: [],
       voicingSetStart: Math.max(0, n - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth)),
+      voicingIndex: 0,
     }));
   };
 
@@ -350,6 +358,7 @@ export default function App() {
       tuning: preset.notes.map((x) => ({ ...x })),
       hiddenStrings: s.hiddenStrings.filter((i) => i < preset.strings),
       voicingSetStart: Math.max(0, Math.min(s.voicingSetStart, preset.strings - (s.voicingStyle === 'drop2' ? 4 : s.voicingWidth))),
+      voicingIndex: 0,
     }));
   };
 
@@ -358,6 +367,7 @@ export default function App() {
       ...s,
       tuningId: 'custom',
       tuning: s.tuning.map((t, i) => (i === stringIndex ? { ...t, pc } : t)),
+      voicingIndex: 0,
     }));
   };
 
@@ -369,7 +379,7 @@ export default function App() {
   // Show a chord on the instruments (from the builder or a progression step),
   // switching into chord view so it is visible.
   const handleShowChord = (chord: Chord | null) => {
-    setState((s) => ({ ...s, activeChord: chord, viewMode: 'chord' }));
+    setState((s) => ({ ...s, activeChord: chord, viewMode: 'chord', voicingIndex: 0 }));
   };
 
   const handleToggleCompare = (enabled: boolean) => {
@@ -517,6 +527,25 @@ export default function App() {
     voicingWidth,
   ]);
 
+  const oneVoicing =
+    state.viewMode === 'chord' && state.chordDisplay === 'voicing' && state.activeChord !== null;
+  const generatedVoicings = useMemo(
+    () => (oneVoicing && state.activeChord ? generateVoicings(state.activeChord, state.tuning) : []),
+    [oneVoicing, state.activeChord, state.tuning],
+  );
+  const voicingCount = generatedVoicings.length;
+  const voicingIndex = voicingCount === 0 ? 0 : Math.min(state.voicingIndex, voicingCount - 1);
+  const selectedVoicing = voicingCount > 0 ? generatedVoicings[voicingIndex] : null;
+  const shownVoicing = playbackVoicing ?? (oneVoicing ? selectedVoicing : null);
+  const activeCells = useMemo(() => {
+    if (!shownVoicing) return undefined;
+    return new Set(shownVoicing.notes.map((note) => `${note.stringIndex}:${note.fret}`));
+  }, [shownVoicing]);
+  const voicingPcs = useMemo(() => {
+    if (!shownVoicing) return null;
+    return new Set(shownVoicing.notes.map((note) => note.pc));
+  }, [shownVoicing]);
+
   const guideActive = state.guideTones && state.viewMode === 'chord' && !!state.activeChord;
   const voicingActive =
     !guideActive &&
@@ -542,6 +571,7 @@ export default function App() {
     onlyCells = activeShape.cells;
     caption = activeShape.name;
   }
+  if (playbackVoicing || oneVoicing) onlyCells = null;
 
   const guidePcs = useMemo(() => {
     if (!guideActive || !state.activeChord) return null;
@@ -549,11 +579,12 @@ export default function App() {
   }, [guideActive, state.activeChord]);
 
   const restrictPcs = useMemo(() => {
+    if (playbackVoicing || oneVoicing) return null;
     if (voicingActive && voicedChord && voicingShapes.length > 0) {
       return new Set(selectVoicingTones(voicedChord, voicingWidth).map((t) => t.pc));
     }
     return null;
-  }, [voicingActive, voicedChord, voicingShapes.length, voicingWidth]);
+  }, [playbackVoicing, oneVoicing, voicingActive, voicedChord, voicingShapes.length, voicingWidth]);
 
   const displayedRoot = mod(state.rootPc + shift, 12);
   const modeIndex = family.modes.findIndex((item) => item.key === mode.key);
@@ -721,6 +752,15 @@ export default function App() {
         cagedShapes={cagedShapes}
         voicingToneCount={voicedChord ? selectVoicingTones(voicedChord, 4).length : 3}
         onShape={handleShape}
+        voicingCount={voicingCount}
+        voicingIndex={voicingIndex}
+        onPlayVoicing={() => {
+          if (!selectedVoicing) return;
+          player.playChord(
+            selectedVoicing.notes.map((note) => note.midi),
+            { durationMs: 1200 },
+          );
+        }}
       />
 
       <MidiControls
@@ -740,10 +780,12 @@ export default function App() {
         intervals={intervals}
         scalePcs={scalePcs}
         shift={shift}
+        tuning={state.tuning}
         active={state.viewMode === 'chord'}
         activeChord={state.activeChord}
         ghostScale={state.ghostScale}
         onShowChord={handleShowChord}
+        onShowVoicing={setPlaybackVoicing}
         onGhostScale={(v) => update({ ghostScale: v })}
         diatonicIntervals={diatonic.intervals}
         parentName={diatonic.name}
@@ -841,6 +883,7 @@ export default function App() {
             clickToHear={state.clickToHear}
             spelling={spelling}
             guidePcs={guidePcs}
+            activeCells={activeCells}
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
           />
@@ -871,6 +914,7 @@ export default function App() {
             clickToHear={state.clickToHear}
             spelling={spelling}
             guidePcs={guidePcs}
+            voicingPcs={voicingPcs}
             onPlay={(midi) => player.playNote(midi, 420)}
           />
         )}

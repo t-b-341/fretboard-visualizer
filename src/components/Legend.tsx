@@ -1,4 +1,4 @@
-import type { ViewMode } from '../App';
+import type { ViewMode } from '../music/types';
 import type { Triad } from '../music/chords';
 
 interface Props {

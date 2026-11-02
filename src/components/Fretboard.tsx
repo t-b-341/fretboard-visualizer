@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
 import type { Chord, Triad } from '../music/chords';
-import type { DisplayMode, ViewMode } from '../App';
+import type { DisplayMode, ViewMode } from '../music/types';
 import { mod, noteName } from '../music/notes';
 import { createEvaluator, noteFillClass, noteTextClass } from '../music/highlight';
 import { guideTonePcs, placeGuideVoices } from '../music/guide';
@@ -45,6 +45,11 @@ interface Props {
   spelling?: ReadonlyMap<number, string> | null;
   /** Pitch classes of this chord's guide tones, when that overlay is on. */
   guidePcs?: Set<number> | null;
+  /**
+   * When set, only these "stringIndex:fret" cells draw as chord tones.
+   * Every other cell is a ghost scale tone, or nothing.
+   */
+  activeCells?: Set<string>;
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -89,6 +94,7 @@ export function Fretboard(props: Props) {
     caption,
     spelling,
     guidePcs,
+    activeCells,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -298,7 +304,10 @@ export function Fretboard(props: Props) {
               if (hidden.has(cell.stringIndex)) return null;
               if (cell.fret < from || cell.fret > to) return null;
               if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
-              const ev = evaluate(cell.pc);
+              const cellKey = `${cell.stringIndex}:${cell.fret}`;
+              const ev = activeCells
+                ? evaluate(cell.pc, { placed: activeCells.has(cellKey) })
+                : evaluate(cell.pc);
               if (!ev) return null;
               const x = X(noteX(cell.fret));
               const y = stringY(cell.stringIndex);

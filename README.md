@@ -13,6 +13,8 @@ scales, modes, and diatonic triads, built for half-step-down tuning.
   pentatonic, blues, diminished, and whole tone.
 - **Diatonic triads I–vii** for the selected key, labeled with Roman numeral and quality,
   plus a chord builder and progressions.
+- **One voicing:** in Chords view, step through a single playable grip on the neck and keyboard instead of lighting every chord tone.
+- **Voice-led playback and export:** with Voice leading on, Play and Export .mid walk a smooth path of grips instead of restacking every chord in root position.
 - **Note names or scale-degree labels.**
 - **Concert vs Standard labeling:** Standard shifts displayed note names up a semitone so
   shapes read like standard tuning; the physical fret positions are unchanged.
