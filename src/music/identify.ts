@@ -1,82 +1,174 @@
-// Name a set of pitch classes from the chord catalog.
-// Exact set matches rank first; a single omitted fifth is the only inexact match.
+// Name a grip from the chord catalog.
+//
+// Every pitch class in the grip is tried as a root against every catalog quality.
+// An exact pitch-class match scores highest. Omitting a fifth (the usual guitar
+// shortcut) costs a little. Omitting a third or a seventh, or adding a tone the
+// quality does not contain, costs more — enough that those readings drop out.
+// Ties prefer the bass note as the root. Anything else is a slash chord, with a
+// classical inversion when the bass is a chord tone (root, 3rd, 5th, or 7th).
+// A two-note grip is named only on an exact catalog match (a power chord, when
+// the table has one). The omitted-fifth allowance needs a larger grip.
 
-import { buildChord, CHORD_QUALITIES, type Chord } from './chords';
-import { mod } from './notes';
+import { CHORD_QUALITIES, buildChord, chordSymbol, type Chord, type ChordTone } from './chords';
+import { chromaticDegreeLabel, mod, noteName } from './notes';
 
-export interface ChordMatch {
+export type Inversion = 'root' | '1st' | '2nd' | '3rd';
+
+export interface ChordCandidate {
   chord: Chord;
-  match: 'exact' | 'subset';
-  /** Chord pitch classes absent from the input. Empty for an exact match. */
-  missing: number[];
-  /** The lowest note, when the caller supplied one. */
-  bassPc?: number;
-  /** True when a bass pitch class was given and it is not the chord root. */
-  inversion: boolean;
+  bassPc: number;
+  inversion: Inversion | null;
+  /** Concert spelling, e.g. "C", "C/E", "Am7/G". */
+  slashName: string;
+  /** Degree names absent from the grip, e.g. ["5"]. */
+  missing: string[];
+  /** Degree names (above this root) present in the grip but not the quality. */
+  extra: string[];
+  score: number;
 }
 
-interface RankedMatch extends ChordMatch {
-  order: number;
+const BASE = 100;
+const MISS_FIFTH = 10;
+const MISS_THIRD = 50;
+const MISS_SEVENTH = 40;
+const MISS_EXT = 40;
+const EXTRA = 36;
+/** Exact matches and omitted fifths stay; a missing third or seventh does not. */
+const MIN_SCORE = BASE - MISS_FIFTH - MISS_FIFTH;
+
+const INVERSIONS: Inversion[] = ['root', '1st', '2nd', '3rd'];
+
+interface Ranked extends ChordCandidate {
+  catalog: number;
 }
 
-/** Unique pitch classes in 0–11. */
-function normalizePcs(pcs: number[]): number[] {
-  return [...new Set(pcs.map((pc) => mod(pc, 12)))];
+function distinctPcs(notes: { pc: number }[]): number[] {
+  return [...new Set(notes.map((note) => mod(note.pc, 12)))];
 }
 
-/** The omitted pitch class is a fifth (5, b5, or #5) and nothing else. */
-function omittedFifth(chord: Chord, missingPc: number): boolean {
-  const tones = chord.tones.filter(
-    (tone) => mod(chord.rootPc + tone.interval, 12) === missingPc,
-  );
-  return tones.length > 0 && tones.every((tone) => tone.role === 'fifth');
+function bassPcOf(notes: { pc: number; midi: number }[]): number {
+  let best = notes[0];
+  for (const note of notes) {
+    if (note.midi < best.midi) best = note;
+  }
+  return mod(best.pc, 12);
+}
+
+function penaltyFor(tone: ChordTone): number {
+  switch (tone.role) {
+    case 'fifth':
+      return MISS_FIFTH;
+    case 'third':
+      return MISS_THIRD;
+    case 'seventh':
+      return MISS_SEVENTH;
+    case 'ext':
+      return MISS_EXT;
+    default:
+      return MISS_THIRD;
+  }
+}
+
+function inversionFor(chord: Chord, bassPc: number): Inversion | null {
+  if (bassPc === chord.rootPc) return 'root';
+  const structural = chord.tones.filter((tone) => tone.role !== 'ext');
+  let best: ChordTone | null = null;
+  for (const tone of structural) {
+    if (mod(chord.rootPc + tone.interval, 12) !== bassPc) continue;
+    if (!best || tone.interval < best.interval) best = tone;
+  }
+  if (!best) return null;
+  const index = structural.indexOf(best);
+  return INVERSIONS[index] ?? null;
+}
+
+function slashOf(chord: Chord, bassPc: number): string {
+  const symbol = chordSymbol(chord);
+  if (bassPc === chord.rootPc) return symbol;
+  return `${symbol}/${noteName(bassPc)}`;
+}
+
+/** Display name, shifted into the Concert or Standard label system. */
+export function candidateLabel(candidate: ChordCandidate, shift = 0): string {
+  const symbol = chordSymbol(candidate.chord, shift);
+  const bass = mod(candidate.bassPc + shift, 12);
+  const root = mod(candidate.chord.rootPc + shift, 12);
+  const name = bass === root ? symbol : `${symbol}/${noteName(bass)}`;
+  if (candidate.inversion && candidate.inversion !== 'root') {
+    return `${name} (${candidate.inversion} inversion)`;
+  }
+  return name;
+}
+
+/** "no 5" / "extra b9", for the line under a candidate. */
+export function candidateDetail(candidate: ChordCandidate): string {
+  const parts: string[] = [];
+  if (candidate.missing.length > 0) parts.push(candidate.missing.map((degree) => `no ${degree}`).join(', '));
+  if (candidate.extra.length > 0) parts.push(candidate.extra.map((degree) => `extra ${degree}`).join(', '));
+  return parts.join(' · ');
 }
 
 /**
- * Catalog chords that contain every input pitch class.
- * Exact set equality wins; otherwise the input may omit exactly one fifth.
- * At most 8 matches, ranked exact-first, bass-root, fewer tones, catalog order.
+ * Rank catalog chords for a grip. Empty when fewer than two distinct pitch classes.
+ * At most three candidates.
  */
-export function identifyChord(pcs: number[], bassPc?: number): ChordMatch[] {
-  const input = normalizePcs(pcs);
-  if (input.length < 2) return [];
+export function identifyChord(notes: { pc: number; midi: number }[]): ChordCandidate[] {
+  const pcs = distinctPcs(notes);
+  if (pcs.length < 2) return [];
 
-  const inputSet = new Set(input);
-  const bass = bassPc === undefined ? undefined : mod(bassPc, 12);
-  const matches: RankedMatch[] = [];
-  let order = 0;
+  const input = new Set(pcs);
+  const bassPc = bassPcOf(notes);
+  const found: Ranked[] = [];
 
-  for (let root = 0; root < 12; root++) {
-    for (const quality of CHORD_QUALITIES) {
+  for (const root of pcs) {
+    CHORD_QUALITIES.forEach((quality, catalog) => {
       const chord = buildChord(root, quality.key);
-      if (!input.every((pc) => chord.pcs.includes(pc))) continue;
+      const chordPcs = new Set(chord.pcs);
+      const missing: string[] = [];
+      const penalized = new Set<number>();
+      let penalty = 0;
 
-      const missing = chord.pcs.filter((pc) => !inputSet.has(pc));
-      const exact = missing.length === 0;
-      if (!exact && (missing.length !== 1 || !omittedFifth(chord, missing[0]))) continue;
+      for (const tone of chord.tones) {
+        const pc = mod(root + tone.interval, 12);
+        if (input.has(pc)) continue;
+        missing.push(tone.degree);
+        if (penalized.has(pc)) continue;
+        penalized.add(pc);
+        penalty += penaltyFor(tone);
+      }
 
-      const match: RankedMatch = {
+      const extra: string[] = [];
+      for (const pc of pcs) {
+        if (chordPcs.has(pc)) continue;
+        extra.push(chromaticDegreeLabel(mod(pc - root, 12)));
+        penalty += EXTRA;
+      }
+
+      const score = BASE - penalty;
+      if (score < MIN_SCORE) return;
+      if (pcs.length < 3 && (missing.length > 0 || extra.length > 0)) return;
+
+      found.push({
         chord,
-        match: exact ? 'exact' : 'subset',
-        missing: exact ? [] : missing,
-        inversion: bass !== undefined && bass !== chord.rootPc,
-        order: order++,
-      };
-      if (bass !== undefined) match.bassPc = bass;
-      matches.push(match);
-    }
+        bassPc,
+        inversion: inversionFor(chord, bassPc),
+        slashName: slashOf(chord, bassPc),
+        missing,
+        extra,
+        score,
+        catalog,
+      });
+    });
   }
 
-  matches.sort((a, b) => {
-    if (a.match !== b.match) return a.match === 'exact' ? -1 : 1;
-    const aBass = bass !== undefined && a.chord.rootPc === bass ? 0 : 1;
-    const bBass = bass !== undefined && b.chord.rootPc === bass ? 0 : 1;
+  found.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aBass = a.chord.rootPc === bassPc ? 0 : 1;
+    const bBass = b.chord.rootPc === bassPc ? 0 : 1;
     if (aBass !== bBass) return aBass - bBass;
-    if (a.chord.tones.length !== b.chord.tones.length) {
-      return a.chord.tones.length - b.chord.tones.length;
-    }
-    return a.order - b.order;
+    if (a.catalog !== b.catalog) return a.catalog - b.catalog;
+    return a.chord.rootPc - b.chord.rootPc;
   });
 
-  return matches.slice(0, 8).map(({ order: _order, ...match }) => match);
+  return found.slice(0, 3).map(({ catalog: _catalog, ...candidate }) => candidate);
 }

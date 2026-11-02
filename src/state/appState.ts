@@ -77,7 +77,7 @@ export interface AppState {
   sharedOnly: boolean;
   /** Inclusive fret range for grips. Open strings are allowed only when min is 0. */
   positionWindow: { enabled: boolean; min: number; max: number };
-  /** Identify view: one fret per string. Missing keys are unpicked strings. */
+  /** Identify grip: one fret per string. Session only — omitted from saved setups. */
   picked: Record<number, number>;
   /** Quiz view. Mark keys are "stringIndex:fret". */
   quiz: {
@@ -182,18 +182,6 @@ function clampNum(v: unknown, lo: number, hi: number, fallback: number): number 
   return Math.max(lo, Math.min(hi, n));
 }
 
-function readPicked(v: unknown, numStrings: number, fretCount: number): Record<number, number> {
-  if (!isRecord(v)) return {};
-  const picked: Record<number, number> = {};
-  for (const [key, fret] of Object.entries(v)) {
-    const stringIndex = Number(key);
-    if (!Number.isInteger(stringIndex) || stringIndex < 0 || stringIndex >= numStrings) continue;
-    if (typeof fret !== 'number' || !Number.isInteger(fret) || fret < 0 || fret > fretCount) continue;
-    picked[stringIndex] = fret;
-  }
-  return picked;
-}
-
 function readPositionWindow(v: unknown, fretCount: number): AppState['positionWindow'] {
   const base = { enabled: false, min: 5, max: 8 };
   if (!isRecord(v)) return base;
@@ -248,6 +236,11 @@ function readChord(v: unknown): Chord | null {
     tones,
     pcs: [...new Set(tones.map((t) => mod(rootPc + t.interval, 12)))],
   };
+}
+
+/** Copy of `app` safe to write to localStorage. The identify grip stays in memory only. */
+export function persistedApp(app: AppState): AppState {
+  return { ...app, picked: {} };
 }
 
 export function mergeApp(raw: unknown): AppState {
@@ -328,7 +321,7 @@ export function mergeApp(raw: unknown): AppState {
     compareModeKey: modeOf(compareFamilyKey, raw.compareModeKey, base.compareModeKey),
     sharedOnly: raw.sharedOnly === true,
     positionWindow: readPositionWindow(raw.positionWindow, fretCount),
-    picked: readPicked(raw.picked, numStrings, fretCount),
+    picked: {},
     noteQuiz: readNoteQuiz(raw.noteQuiz, numStrings, fretCount),
   };
 }

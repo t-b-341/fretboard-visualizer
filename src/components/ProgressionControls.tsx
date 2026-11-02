@@ -55,6 +55,17 @@ interface Props {
   session: ProgressionSnapshot;
   loadId: number;
   onSessionChange: (snap: ProgressionSnapshot) => void;
+  /** Identify mode, toggled from the chord builder row. */
+  identifyOn: boolean;
+  onToggleIdentify: () => void;
+  /** When set, the Root and Quality selects load this chord. */
+  builderSeed: BuilderSeed | null;
+}
+
+export interface BuilderSeed {
+  token: number;
+  rootPc: number;
+  quality: ChordQuality;
 }
 
 export interface ProgressionSnapshot {
@@ -148,6 +159,9 @@ export function ProgressionControls(props: Props) {
     session,
     loadId,
     onSessionChange,
+    identifyOn,
+    onToggleIdentify,
+    builderSeed,
   } = props;
 
   const [, setTick] = useState(0);
@@ -224,6 +238,12 @@ export function ProgressionControls(props: Props) {
   useEffect(() => {
     onShowVoicingRef.current(null);
   }, [progression]);
+
+  useEffect(() => {
+    if (!builderSeed) return;
+    setBuilderRootPc(mod(builderSeed.rootPc, 12));
+    setBuilderQuality(builderSeed.quality);
+  }, [builderSeed]);
 
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
@@ -421,6 +441,14 @@ export function ProgressionControls(props: Props) {
         </button>
         <button className="btn-mini" onClick={() => hear(builderChord)} disabled={!soundReady}>
           &#9654; Hear
+        </button>
+        <button
+          type="button"
+          className={identifyOn ? 'btn-mini active' : 'btn-mini'}
+          aria-pressed={identifyOn}
+          onClick={onToggleIdentify}
+        >
+          Identify
         </button>
       </div>
 

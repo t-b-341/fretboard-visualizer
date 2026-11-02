@@ -1,47 +1,57 @@
-import { chordSymbol } from '../music/chords';
-import type { ChordMatch } from '../music/identify';
-import { mod, noteName } from '../music/notes';
-import type { Cell } from '../music/fretboard';
 import { player } from '../audio/player';
+import type { Cell } from '../music/fretboard';
+import { candidateDetail, candidateLabel, type ChordCandidate } from '../music/identify';
 
 interface Props {
-  identifyMatches: ChordMatch[];
+  candidates: ChordCandidate[];
   pickedNotes: Cell[];
   shift: number;
   onClear: () => void;
+  onSend: () => void;
 }
 
-export function IdentifyPanel({ identifyMatches, pickedNotes, shift, onClear }: Props) {
+export function IdentifyPanel({ candidates, pickedNotes, shift, onClear, onSend }: Props) {
+  const top = candidates[0];
+  const rest = candidates.slice(1);
+  const distinct = new Set(pickedNotes.map((note) => note.pc)).size;
+  const detail = top ? candidateDetail(top) : '';
+
   return (
     <div className="identify-panel" aria-label="Chord identify">
-      <div className="identify-matches">
-        {identifyMatches.length === 0 ? (
-          <span className="muted">
-            {pickedNotes.length < 2 ? 'Pick two or more notes' : 'No match'}
-          </span>
+      <div className="identify-readout">
+        {top ? (
+          <>
+            <div className="identify-primary">
+              <span className="identify-name">{candidateLabel(top, shift)}</span>
+              {detail && <span className="identify-detail">{detail}</span>}
+            </div>
+            {rest.length > 0 && (
+              <div className="identify-alts">
+                {rest.map((candidate, index) => {
+                  const altDetail = candidateDetail(candidate);
+                  return (
+                    <span
+                      key={`${candidate.chord.rootPc}-${candidate.chord.quality ?? candidate.chord.symbol}-${index}`}
+                      className="identify-alt"
+                    >
+                      {candidateLabel(candidate, shift)}
+                      {altDetail ? ` · ${altDetail}` : ''}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </>
         ) : (
-          identifyMatches.map((match, i) => {
-            const bass =
-              match.inversion && match.bassPc !== undefined
-                ? `/${noteName(mod(match.bassPc + shift, 12))}`
-                : '';
-            const missing = match.match === 'subset' ? ' (no 5th)' : '';
-            return (
-              <span
-                key={`${match.chord.rootPc}-${match.chord.symbol}-${match.match}-${i}`}
-                className={match.match === 'subset' ? 'identify-match muted' : 'identify-match'}
-              >
-                {chordSymbol(match.chord, shift)}
-                {bass}
-                {missing}
-              </span>
-            );
-          })
+          <span className="muted">{distinct < 2 ? 'Pick two or more notes' : 'No match'}</span>
         )}
       </div>
       <div className="identify-actions">
         <button type="button" className="btn-mini" onClick={onClear} disabled={pickedNotes.length === 0}>
           Clear
+        </button>
+        <button type="button" className="btn-mini" onClick={onSend} disabled={!top}>
+          Send to builder
         </button>
         <button
           type="button"

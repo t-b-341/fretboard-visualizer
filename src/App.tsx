@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import './App.css';
 import { Controls } from './components/Controls';
 import { FormulaBar } from './components/FormulaBar';
@@ -9,6 +9,7 @@ import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
 import { MidiControls } from './components/MidiControls';
 import { ProgressionControls } from './components/ProgressionControls';
+import type { BuilderSeed } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
 import { QuizPanel } from './components/QuizPanel';
 import { SetupBar } from './components/SetupBar';
@@ -60,6 +61,7 @@ export default function App() {
     () => deriveView(state, session, playbackVoicing),
     [state, session, playbackVoicing],
   );
+  const [builderSeed, setBuilderSeed] = useState<BuilderSeed | null>(null);
   const noteQuiz = useNoteQuiz({
     enabled: state.noteQuiz.enabled,
     settings: state.noteQuiz,
@@ -154,6 +156,9 @@ export default function App() {
         session={session}
         loadId={loadId}
         onSessionChange={onSessionChange}
+        identifyOn={state.viewMode === 'identify'}
+        onToggleIdentify={() => update({ viewMode: state.viewMode === 'identify' ? 'chord' : 'identify' })}
+        builderSeed={builderSeed}
       />
 
       <FormulaBar
@@ -171,6 +176,25 @@ export default function App() {
       />
 
       <div className="instrument-views">
+        {state.viewMode === 'identify' && (
+          <IdentifyPanel
+            candidates={derived.identifyMatches}
+            pickedNotes={derived.pickedNotes}
+            shift={derived.shift}
+            onClear={() => update({ picked: {} })}
+            onSend={() => {
+              const top = derived.identifyMatches[0];
+              const quality = top?.chord.quality;
+              if (!top || !quality) return;
+              setBuilderSeed((seed) => ({
+                token: (seed?.token ?? 0) + 1,
+                rootPc: top.chord.rootPc,
+                quality,
+              }));
+              update({ activeChord: top.chord });
+            }}
+          />
+        )}
         {showFretboard && (
           <Fretboard
             grid={derived.grid}
@@ -224,14 +248,6 @@ export default function App() {
             score={state.quiz.score}
             total={state.quiz.total}
             onNext={nextQuiz}
-          />
-        )}
-        {state.viewMode === 'identify' && (
-          <IdentifyPanel
-            identifyMatches={derived.identifyMatches}
-            pickedNotes={derived.pickedNotes}
-            shift={derived.shift}
-            onClear={() => update({ picked: {} })}
           />
         )}
         {(state.instrumentView === 'keyboard' || state.instrumentView === 'both') && (

@@ -20,6 +20,7 @@ import {
   fitNoteQuiz,
   mergeApp,
   mergeProgression,
+  persistedApp,
 } from './appState';
 import type { AppState } from './appState';
 import { selectScale } from './derive';
@@ -55,7 +56,7 @@ export function useAppState() {
   const shift = labelShift(state.labelMode);
 
   useEffect(() => {
-    const t = window.setTimeout(() => saveLast(stateRef.current, progRef.current), 250);
+    const t = window.setTimeout(() => saveLast(persistedApp(stateRef.current), progRef.current), 250);
     return () => window.clearTimeout(t);
   }, [state]);
 
@@ -80,7 +81,7 @@ export function useAppState() {
 
   const onSessionChange = (snap: ProgressionSnapshot) => {
     progRef.current = snap;
-    saveLast(stateRef.current, snap);
+    saveLast(persistedApp(stateRef.current), snap);
     setSession(snap);
   };
 
@@ -255,7 +256,7 @@ export function useAppState() {
   const saveSetup = () => {
     const name = setupName.trim();
     if (!name) return;
-    setNamed(saveNamed(name, stateRef.current, progRef.current));
+    setNamed(saveNamed(name, persistedApp(stateRef.current), progRef.current));
     setSetupName('');
   };
   const loadSetup = () => {

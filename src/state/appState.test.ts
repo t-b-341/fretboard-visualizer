@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildChord } from '../music/chords';
 import { defaultNoteQuizSettings } from '../music/quiz';
-import { createInitialState, mergeApp, mergeProgression } from './appState';
+import { createInitialState, mergeApp, mergeProgression, persistedApp } from './appState';
 
 describe('mergeApp', () => {
   it('round-trips a full saved setup', () => {
@@ -63,6 +63,14 @@ describe('mergeApp', () => {
     expect(loaded.noteQuiz.types.findNote).toBe(false);
     expect(loaded.noteQuiz.types.earInterval).toBe(false);
     expect(loaded.noteQuiz.harmonic).toBe(true);
+  });
+
+  it('does not restore an identify grip', () => {
+    expect(mergeApp({ picked: { 0: 3, 2: 5 } }).picked).toEqual({});
+    const app = createInitialState();
+    app.picked = { 1: 2 };
+    expect(persistedApp(app).picked).toEqual({});
+    expect(app.picked).toEqual({ 1: 2 });
   });
 
   it('rebuilds a saved chord from its quality key', () => {
