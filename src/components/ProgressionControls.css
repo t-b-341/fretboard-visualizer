@@ -93,3 +93,126 @@
 .prog-chip.out .prog-chip-symbol {
   color: var(--overlay);
 }
+
+/* Degree fill for a chord whose root sits in the parent scale.
+   Light text fails WCAG AA on every degree color, so the label is the same
+   dark ink the neck uses on its yellow and cyan notes. */
+.prog-chip.chord-deg-0,
+.btn-mini.chord-deg-0 { background: var(--deg-0); }
+.prog-chip.chord-deg-1,
+.btn-mini.chord-deg-1 { background: var(--deg-1); }
+.prog-chip.chord-deg-2,
+.btn-mini.chord-deg-2 { background: var(--deg-2); }
+.prog-chip.chord-deg-3,
+.btn-mini.chord-deg-3 { background: var(--deg-3); }
+.prog-chip.chord-deg-4,
+.btn-mini.chord-deg-4 { background: var(--deg-4); }
+.prog-chip.chord-deg-5,
+.btn-mini.chord-deg-5 { background: var(--deg-5); }
+.prog-chip.chord-deg-6,
+.btn-mini.chord-deg-6 { background: var(--deg-6); }
+.prog-chip.chord-deg-7,
+.btn-mini.chord-deg-7 { background: var(--deg-7); }
+
+.prog-chip.chord-deg-0,
+.prog-chip.chord-deg-1,
+.prog-chip.chord-deg-2,
+.prog-chip.chord-deg-3,
+.prog-chip.chord-deg-4,
+.prog-chip.chord-deg-5,
+.prog-chip.chord-deg-6,
+.prog-chip.chord-deg-7,
+.btn-mini.chord-deg-0,
+.btn-mini.chord-deg-1,
+.btn-mini.chord-deg-2,
+.btn-mini.chord-deg-3,
+.btn-mini.chord-deg-4,
+.btn-mini.chord-deg-5,
+.btn-mini.chord-deg-6,
+.btn-mini.chord-deg-7 {
+  color: #1a1304;
+}
+
+.prog-chip.chord-colored .prog-chip-main,
+.prog-chip.chord-colored .prog-chip-symbol,
+.prog-chip.chord-colored .prog-chip-roman,
+.prog-chip.chord-colored .prog-chip-x {
+  color: inherit;
+}
+.prog-chip.chord-colored .prog-chip-x {
+  border-left-color: rgba(0, 0, 0, 0.28);
+}
+.prog-chip.chord-colored .prog-chip-x:hover {
+  color: #111;
+}
+
+.prog-chip.chord-borrowed,
+.btn-mini.chord-borrowed {
+  border: 2px dashed var(--root);
+}
+
+.prog-chip.chord-outside,
+.btn-mini.chord-outside {
+  background: var(--chord-outside);
+  color: #fff;
+  border: 2px solid #c5cdd6;
+}
+.prog-chip.chord-outside .prog-chip-x {
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+.prog-chip.chord-outside .prog-chip-x:hover {
+  color: #fff;
+}
+
+.prog-chip.chord-colored.selected,
+.prog-chip.chord-colored.playing {
+  border-color: var(--accent);
+}
+
+.prog-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--overlay);
+}
+
+.vl-weights {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 8px 10px;
+}
+.vl-weights summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+}
+.vl-weights-body {
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.vl-weights[open] > .vl-weights-body {
+  display: grid;
+}
+.vl-weight {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vl-weight-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.vl-weight input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.vl-weights-reset {
+  grid-column: 1 / -1;
+  justify-self: start;
+}

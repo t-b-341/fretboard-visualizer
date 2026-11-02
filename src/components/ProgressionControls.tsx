@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './ProgressionControls.css';
+import { chordColorTitle, classifyChord } from '../music/chordColor';
+import type { ChordClassification } from '../music/chordColor';
 import {
   CHORD_QUALITIES,
   buildChord,
@@ -8,12 +10,16 @@ import {
   chordSymbol,
   romanForChord,
 } from '../music/chords';
-import type { Chord, ChordQuality } from '../music/chords';
+import type { Chord, ChordQuality, ChordToneRole } from '../music/chords';
 import { PROGRESSION_TEMPLATES, generateProgression, getTemplate } from '../music/progression';
 import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
 import { mod, noteName } from '../music/notes';
+import type { GuitarString } from '../music/tunings';
+import { DEFAULT_WEIGHTS, leadProgression } from '../music/voiceLeading';
+import type { Weights } from '../music/voiceLeading';
+import type { Voicing } from '../music/voicings';
 
 interface Props {
   /** Key centre (concert pitch class). */
@@ -24,6 +30,8 @@ interface Props {
   scalePcs: number[];
   /** Label shift (concert vs standard). */
   shift: number;
+  /** Current guitar tuning. Voice leading places grips on these strings. */
+  tuning: GuitarString[];
   /** Whether the chord view is currently active (viewMode === 'chord'). */
   active: boolean;
   /** The chord currently shown on the instruments. */
@@ -31,12 +39,18 @@ interface Props {
   ghostScale: boolean;
   /** Show a chord on the instruments (also switches into chord view). */
   onShowChord: (chord: Chord | null) => void;
+  /** Grip to light during voice-led playback. Null returns the fretboard to the chord display. */
+  onShowVoicing: (v: Voicing | null) => void;
   onGhostScale: (v: boolean) => void;
   /** Heptatonic scale the diatonic buttons are built from (the parent, for pentatonic and similar). */
   diatonicIntervals: number[];
   parentName: string | null;
   guideTones: boolean;
+  /** Color chips and diatonic buttons from the root's degree in the parent scale. */
+  colorChordsByRoot: boolean;
   onGuideTones: (v: boolean) => void;
+  /** When enabled, grips stay inside this inclusive fret range. */
+  positionWindow: { enabled: boolean; min: number; max: number };
   /** Restored session. Applied on mount, and again whenever loadId changes. */
   session: ProgressionSnapshot;
   loadId: number;
@@ -70,21 +84,67 @@ const QUALITY_GROUPS = (() => {
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
+function chordPaintClass(base: string, painted: ChordClassification | null): string {
+  if (!painted) return base;
+  const degree = painted.degreeIndex === null ? '' : ` chord-deg-${painted.degreeIndex}`;
+  return `${base} chord-colored chord-${painted.status}${degree}`;
+}
+
+function cloneWeights(w: Weights): Weights {
+  return { ...w, roleMotion: { ...w.roleMotion } };
+}
+
+function snapToStep(value: number, step: number): number {
+  const places = step < 1 ? 1 : 0;
+  return Number((Math.round(value / step) * step).toFixed(places));
+}
+
+function formatWeight(value: number, step: number): string {
+  return step < 1 ? value.toFixed(1) : String(Math.round(value));
+}
+
+const ROLE_MOTION_FIELDS: { key: ChordToneRole; label: string }[] = [
+  { key: 'root', label: 'Root motion' },
+  { key: 'third', label: 'Third motion' },
+  { key: 'fifth', label: 'Fifth motion' },
+  { key: 'seventh', label: 'Seventh motion' },
+  { key: 'ext', label: 'Extension motion' },
+];
+
+const SCALAR_WEIGHT_FIELDS: {
+  key: Exclude<keyof Weights, 'roleMotion'>;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}[] = [
+  { key: 'handShift', label: 'Hand shift', min: 0, max: 5, step: 0.1 },
+  { key: 'commonToneBonus', label: 'Common-tone bonus', min: 0, max: 5, step: 0.1 },
+  { key: 'resolutionBonus', label: 'Resolution bonus', min: 0, max: 5, step: 0.1 },
+  { key: 'registerAnchor', label: 'Register anchor', min: 0, max: 5, step: 0.1 },
+  { key: 'omissionPenalty', label: 'Omission penalty', min: 0, max: 20, step: 0.5 },
+  { key: 'anchorFret', label: 'Anchor fret', min: 0, max: 15, step: 1 },
+];
+
 export function ProgressionControls(props: Props) {
   const {
     rootPc,
     intervals,
     scalePcs,
     shift,
+    tuning,
     active,
     activeChord,
     ghostScale,
     onShowChord,
+    onShowVoicing,
     onGhostScale,
     diatonicIntervals,
     parentName,
     guideTones,
+    colorChordsByRoot,
     onGuideTones,
+    positionWindow,
     session,
     loadId,
     onSessionChange,
@@ -103,8 +163,14 @@ export function ProgressionControls(props: Props) {
   const [useSevenths, setUseSevenths] = useState(session.useSevenths);
   const [spicy, setSpicy] = useState(session.spicy);
   const [templateId, setTemplateId] = useState(session.templateId);
+  const [voiceLeading, setVoiceLeading] = useState(true);
+  const [weights, setWeights] = useState<Weights>(() => cloneWeights(DEFAULT_WEIGHTS));
 
   const timerRef = useRef<number | null>(null);
+  const onShowVoicingRef = useRef(onShowVoicing);
+  onShowVoicingRef.current = onShowVoicing;
+  const voiceLeadingRef = useRef(voiceLeading);
+  voiceLeadingRef.current = voiceLeading;
 
   // Re-render when the MIDI engine's state changes (to reflect readiness).
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
@@ -134,6 +200,7 @@ export function ProgressionControls(props: Props) {
     stopTimer();
     setPlaying(false);
     player.stop();
+    onShowVoicingRef.current(null);
   };
 
   // Replace the working progression when a saved setup is loaded.
@@ -152,6 +219,11 @@ export function ProgressionControls(props: Props) {
     // session is the snapshot captured for this loadId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadId]);
+
+  // A new progression is no longer the one that was just played.
+  useEffect(() => {
+    onShowVoicingRef.current(null);
+  }, [progression]);
 
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
@@ -176,6 +248,28 @@ export function ProgressionControls(props: Props) {
   const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
+  const fretRange = useMemo<[number, number] | undefined>(
+    () => (positionWindow.enabled ? [positionWindow.min, positionWindow.max] : undefined),
+    [positionWindow.enabled, positionWindow.min, positionWindow.max],
+  );
+  const allowOpen = positionWindow.enabled ? positionWindow.min === 0 : undefined;
+  const lead = useMemo(() => {
+    try {
+      return {
+        path: leadProgression(
+          progression,
+          tuning,
+          weights,
+          fretRange ? { fretRange, allowOpen } : undefined,
+        ),
+        error: null as string | null,
+      };
+    } catch (err) {
+      return { path: null as Voicing[] | null, error: err instanceof Error ? err.message : String(err) };
+    }
+  }, [progression, tuning, weights, fretRange, allowOpen]);
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
   const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
   const preview = (chord: Chord) => {
     onShowChord(chord);
@@ -224,7 +318,21 @@ export function ProgressionControls(props: Props) {
     const fire = (idx: number) => {
       setPlayIndex(idx);
       onShowChord(chords[idx]);
-      player.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
+      const current = leadRef.current;
+      const grip =
+        voiceLeadingRef.current && current.path && !current.error && current.path.length === chords.length
+          ? current.path[idx]
+          : null;
+      if (grip) {
+        player.playChord(
+          grip.notes.map((n) => n.midi),
+          { durationMs: dur * 0.95 },
+        );
+        onShowVoicingRef.current(grip);
+      } else {
+        player.playChord(voice(chords[idx]), { durationMs: dur * 0.95 });
+        onShowVoicingRef.current(null);
+      }
     };
     setPlaying(true);
     fire(0);
@@ -236,6 +344,7 @@ export function ProgressionControls(props: Props) {
         } else {
           stopTimer();
           setPlaying(false);
+          onShowVoicingRef.current(null);
           return;
         }
       }
@@ -248,7 +357,11 @@ export function ProgressionControls(props: Props) {
   const exportMidi = () => {
     if (progression.length === 0) return;
     const keyLabel = noteName(mod(rootPc + shift, 12));
-    const bytes = progressionToSmf(progression.map(voice), {
+    const midiChords =
+      voiceLeading && lead.path && !lead.error
+        ? lead.path.map((v) => v.notes.map((n) => n.midi))
+        : progression.map(voice);
+    const bytes = progressionToSmf(midiChords, {
       bpm: tempo,
       beatsPerChord,
       trackName: `Fretboard progression in ${keyLabel}`,
@@ -317,11 +430,19 @@ export function ProgressionControls(props: Props) {
           Diatonic
         </span>
         <div className="btn-row">
-          {diatonicChords.map((ch, d) => (
-            <button key={d} className="btn-mini" title={chordSymbol(ch, shift)} onClick={() => addChord(ch)}>
-              {romanForChord(rootPc, ch)}
-            </button>
-          ))}
+          {diatonicChords.map((ch, d) => {
+            const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
+            return (
+              <button
+                key={d}
+                className={chordPaintClass('btn-mini', painted)}
+                title={painted ? chordColorTitle(ch, rootPc, intervals) : chordSymbol(ch, shift)}
+                onClick={() => addChord(ch)}
+              >
+                {romanForChord(rootPc, ch)}
+              </button>
+            );
+          })}
         </div>
         <label className="checkbox-row">
           <input type="checkbox" checked={useSevenths} onChange={(e) => setUseSevenths(e.target.checked)} /> 7th
@@ -357,9 +478,10 @@ export function ProgressionControls(props: Props) {
           <span className="muted">No chords yet &mdash; add some above or generate a progression.</span>
         )}
         {progression.map((ch, i) => {
-          const out = !chordInKey(scalePcs, ch);
+          const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
+          const out = !painted && !chordInKey(scalePcs, ch);
           const cls = [
-            'prog-chip',
+            chordPaintClass('prog-chip', painted),
             i === playIndex ? 'playing' : '',
             i === selectedIdx && !playing ? 'selected' : '',
             out ? 'out' : '',
@@ -371,7 +493,7 @@ export function ProgressionControls(props: Props) {
               <button
                 className="prog-chip-main"
                 onClick={() => preview(ch)}
-                title={out ? 'Outside the key' : 'In key'}
+                title={painted ? chordColorTitle(ch, rootPc, intervals) : out ? 'Outside the key' : 'In key'}
               >
                 <span className="prog-chip-symbol">{chordSymbol(ch, shift)}</span>
                 <span className="prog-chip-roman">{romanForChord(rootPc, ch)}</span>
@@ -419,6 +541,21 @@ export function ProgressionControls(props: Props) {
         <label className="checkbox-row">
           <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} /> Loop
         </label>
+        <label
+          className="checkbox-row"
+          title="Play and export each chord as the next grip in a smooth path. Off uses a root-position stack in the selected octave."
+        >
+          <input
+            type="checkbox"
+            checked={voiceLeading}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setVoiceLeading(on);
+              if (!on) onShowVoicing(null);
+            }}
+          />{' '}
+          Voice leading
+        </label>
         <span className="midi-sep" />
         <button className="btn-mini" onClick={play} disabled={progression.length === 0}>
           &#9654; Play
@@ -446,6 +583,51 @@ export function ProgressionControls(props: Props) {
           <input type="checkbox" checked={guideTones} onChange={(e) => onGuideTones(e.target.checked)} /> Guide tones
         </label>
       </div>
+      {voiceLeading && (
+        <details className="vl-weights">
+          <summary>Voice leading weights</summary>
+          <div className="vl-weights-body">
+            {ROLE_MOTION_FIELDS.map((field) => (
+              <label key={field.key} className="vl-weight">
+                <span>{field.label}</span>
+                <span className="vl-weight-value">{formatWeight(weights.roleMotion[field.key], 0.1)}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={weights.roleMotion[field.key]}
+                  onChange={(e) => {
+                    const value = snapToStep(Number(e.target.value), 0.1);
+                    setWeights((w) => ({ ...w, roleMotion: { ...w.roleMotion, [field.key]: value } }));
+                  }}
+                />
+              </label>
+            ))}
+            {SCALAR_WEIGHT_FIELDS.map((field) => (
+              <label key={field.key} className="vl-weight">
+                <span>{field.label}</span>
+                <span className="vl-weight-value">{formatWeight(weights[field.key], field.step)}</span>
+                <input
+                  type="range"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={weights[field.key]}
+                  onChange={(e) => {
+                    const value = snapToStep(Number(e.target.value), field.step);
+                    setWeights((w) => ({ ...w, [field.key]: value }));
+                  }}
+                />
+              </label>
+            ))}
+            <button type="button" className="btn-mini vl-weights-reset" onClick={() => setWeights(cloneWeights(DEFAULT_WEIGHTS))}>
+              Reset
+            </button>
+          </div>
+        </details>
+      )}
+      {voiceLeading && lead.error && <p className="prog-error">{lead.error}</p>}
     </div>
   );
 }

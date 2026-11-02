@@ -88,7 +88,7 @@ export interface GenerateOptions {
 }
 
 // Small deterministic PRNG so a given seed reproduces a progression.
-function mulberry32(a: number): () => number {
+export function mulberry32(a: number): () => number {
   return function () {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;

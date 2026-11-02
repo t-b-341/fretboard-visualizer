@@ -1,4 +1,4 @@
-import type { ViewMode } from '../App';
+import type { ViewMode } from '../music/types';
 import type { Triad } from '../music/chords';
 
 interface Props {
@@ -19,6 +19,8 @@ interface Props {
   activeChordInKey?: boolean;
   /** Colour each scale degree instead of root vs scale tone. */
   colorByDegree: boolean;
+  /** Colour progression chords by the root's scale degree. */
+  colorChordsByRoot: boolean;
   degreeLabels: string[];
   /** Chord view is marking the 3rd and 7th inside the chord. */
   guideTones?: boolean;
@@ -41,6 +43,7 @@ export function Legend(props: Props) {
     activeChordRoman,
     activeChordInKey,
     colorByDegree,
+    colorChordsByRoot,
     degreeLabels,
     guideTones,
   } = props;
@@ -134,6 +137,20 @@ export function Legend(props: Props) {
           </>
         )}
       </div>
+
+      {colorChordsByRoot && (
+        <div className="legend-items">
+          <span className="legend-item">
+            <span className="swatch swatch-deg swatch-deg-3" /> Solid = diatonic
+          </span>
+          <span className="legend-item">
+            <span className="swatch swatch-borrowed" /> Dashed = borrowed
+          </span>
+          <span className="legend-item">
+            <span className="swatch swatch-chord-outside" /> Gray = outside the key
+          </span>
+        </div>
+      )}
 
       {viewMode === 'triad' && (
         <div className="legend-chord">

@@ -8,7 +8,7 @@
     "build": "vite build && node scripts/write-portable.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "tsc --noEmit && vitest run"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -1,4 +1,4 @@
-import type { AppState } from '../App';
+import { fitNoteQuiz, type AppState } from '../state/appState';
 import type { FamilyDef, FamilyKey, ModeDef } from '../music/scales';
 import { SCALE_FAMILIES, parentScale } from '../music/scales';
 import { getAllDiatonicTriads, qualitySuffix } from '../music/chords';
@@ -9,6 +9,33 @@ import { mod, noteName, pitchName } from '../music/notes';
 import type { NeckShape, ShapeMode } from '../music/shapes';
 import { notesPerString } from '../music/shapes';
 import { voicingStringSets } from '../music/voicings';
+
+function copyPageLink() {
+  const href = window.location.href;
+  const write = navigator.clipboard?.writeText;
+  if (write) {
+    void write.call(navigator.clipboard, href).catch(() => writeTextFallback(href));
+    return;
+  }
+  writeTextFallback(href);
+}
+
+function writeTextFallback(text: string) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand('copy');
+  } catch {
+    // Clipboard is unavailable; the address bar still holds the link.
+  } finally {
+    area.remove();
+  }
+}
 
 interface Props {
   state: AppState;
@@ -30,6 +57,10 @@ interface Props {
   /** How many tones the current voicing can use (3 for a triad, 4 when a 7th is available). */
   voicingToneCount: number;
   onShape: (mode: ShapeMode, index: number) => void;
+  /** Generated grips for the chord on screen. Used by the one-voicing stepper. */
+  voicingCount: number;
+  voicingIndex: number;
+  onPlayVoicing: () => void;
 }
 
 export function Controls(props: Props) {
@@ -52,6 +83,9 @@ export function Controls(props: Props) {
     cagedShapes,
     voicingToneCount,
     onShape,
+    voicingCount,
+    voicingIndex,
+    onPlayVoicing,
   } = props;
 
   const controllerRange = controllerWindow(state.controllerBaseOctave, state.controllerOctaveShift);
@@ -147,13 +181,22 @@ export function Controls(props: Props) {
             value={state.fretCount}
             onChange={(e) => {
               const v = Math.max(12, Math.min(24, Number(e.target.value) || 24));
+              const min = Math.max(0, Math.min(state.positionWindow.min, v));
+              const max = Math.max(min, Math.min(state.positionWindow.max, v));
               onUpdate({
                 fretCount: v,
                 fretTo: Math.min(state.fretTo, v),
                 fretFrom: Math.min(state.fretFrom, v),
+                positionWindow: { ...state.positionWindow, min, max },
+                noteQuiz: fitNoteQuiz(state.noteQuiz, state.numStrings, v),
               });
             }}
           />
+        </div>
+        <div className="segmented">
+          <button type="button" onClick={copyPageLink}>
+            Copy link
+          </button>
         </div>
       </div>
 
@@ -201,6 +244,53 @@ export function Controls(props: Props) {
               onChange={(e) => {
                 const v = Math.max(state.fretFrom, Math.min(state.fretCount, Number(e.target.value) || state.fretCount));
                 onUpdate({ fretTo: v });
+              }}
+            />
+          </div>
+        </div>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={state.positionWindow.enabled}
+            onChange={(e) =>
+              onUpdate({ positionWindow: { ...state.positionWindow, enabled: e.target.checked } })
+            }
+          />
+          Position window
+        </label>
+        <div className="row">
+          <div className="field">
+            <label>From</label>
+            <input
+              type="number"
+              min={0}
+              max={state.positionWindow.max}
+              value={state.positionWindow.min}
+              aria-label="Position window from"
+              onChange={(e) => {
+                const v = Math.max(
+                  0,
+                  Math.min(state.positionWindow.max, Math.round(Number(e.target.value)) || 0),
+                );
+                onUpdate({ positionWindow: { ...state.positionWindow, min: v } });
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>To</label>
+            <input
+              type="number"
+              min={state.positionWindow.min}
+              max={state.fretCount}
+              value={state.positionWindow.max}
+              aria-label="Position window to"
+              onChange={(e) => {
+                const raw = Math.round(Number(e.target.value));
+                const v = Math.max(
+                  state.positionWindow.min,
+                  Math.min(state.fretCount, Number.isFinite(raw) ? raw : state.positionWindow.max),
+                );
+                onUpdate({ positionWindow: { ...state.positionWindow, max: v } });
               }}
             />
           </div>
@@ -417,6 +507,15 @@ export function Controls(props: Props) {
                 {v === 'fretboard' ? 'Fretboard' : v === 'keyboard' ? 'Keyboard' : 'Both'}
               </button>
             ))}
+            <button
+              type="button"
+              className={state.showStaff ? 'active' : ''}
+              aria-pressed={state.showStaff}
+              title="Grand staff"
+              onClick={() => onUpdate({ showStaff: !state.showStaff })}
+            >
+              Staff
+            </button>
           </div>
         </div>
         {state.instrumentView !== 'fretboard' && (
@@ -496,6 +595,7 @@ export function Controls(props: Props) {
         )}
         <div className="field">
           <label>View</label>
+          <div className="row">
           <div className="segmented" role="group" aria-label="View mode">
             <button
               className={state.viewMode === 'scale' ? 'active' : ''}
@@ -515,8 +615,78 @@ export function Controls(props: Props) {
             >
               Chords
             </button>
+            <button
+              className={state.viewMode === 'identify' ? 'active' : ''}
+              onClick={() => onUpdate({ viewMode: 'identify' })}
+            >
+              Identify
+            </button>
+            <button
+              className={state.viewMode === 'quiz' ? 'active' : ''}
+              onClick={() => onUpdate({ viewMode: 'quiz' })}
+            >
+              Quiz
+            </button>
+          </div>
+          <div className="segmented" role="group" aria-label="Note quiz">
+            <button
+              type="button"
+              className={state.noteQuiz.enabled ? 'active' : ''}
+              aria-pressed={state.noteQuiz.enabled}
+              onClick={() => onUpdate({ noteQuiz: { ...state.noteQuiz, enabled: !state.noteQuiz.enabled } })}
+            >
+              Note quiz
+            </button>
+          </div>
           </div>
         </div>
+        {state.viewMode === 'chord' && (
+          <div className="field">
+            <label>On the neck</label>
+            <div className="segmented" role="group" aria-label="Chord display">
+              <button
+                className={state.chordDisplay === 'all' ? 'active' : ''}
+                onClick={() => onUpdate({ chordDisplay: 'all' })}
+              >
+                All tones
+              </button>
+              <button
+                className={state.chordDisplay === 'voicing' ? 'active' : ''}
+                onClick={() => onUpdate({ chordDisplay: 'voicing' })}
+              >
+                One voicing
+              </button>
+            </div>
+            {state.chordDisplay === 'voicing' && (
+              <div className="voicing-picker">
+                {voicingCount === 0 ? (
+                  <span className="muted">No playable voicing</span>
+                ) : (
+                  <div className="segmented" role="group" aria-label="Which voicing">
+                    <button
+                      disabled={voicingIndex <= 0}
+                      onClick={() => onUpdate({ voicingIndex: voicingIndex - 1 })}
+                    >
+                      Prev
+                    </button>
+                    <span className="segment-value">
+                      {voicingIndex + 1} of {voicingCount}
+                    </span>
+                    <button
+                      disabled={voicingIndex >= voicingCount - 1}
+                      onClick={() => onUpdate({ voicingIndex: voicingIndex + 1 })}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+                <button className="btn-mini" disabled={voicingCount === 0} onClick={onPlayVoicing}>
+                  Play voicing
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {state.viewMode === 'triad' && (
           <>
             <div className="field">
@@ -584,19 +754,29 @@ export function Controls(props: Props) {
         </div>
         <div className="field">
           <label>Color</label>
-          <div className="segmented" role="group" aria-label="Note color">
-            <button
-              className={state.colorMode === 'role' ? 'active' : ''}
-              onClick={() => onUpdate({ colorMode: 'role' })}
-            >
-              Role
-            </button>
-            <button
-              className={state.colorMode === 'degree' ? 'active' : ''}
-              onClick={() => onUpdate({ colorMode: 'degree' })}
-            >
-              Degree
-            </button>
+          <div className="row">
+            <div className="segmented" role="group" aria-label="Note color">
+              <button
+                className={state.colorMode === 'role' ? 'active' : ''}
+                onClick={() => onUpdate({ colorMode: 'role' })}
+              >
+                Role
+              </button>
+              <button
+                className={state.colorMode === 'degree' ? 'active' : ''}
+                onClick={() => onUpdate({ colorMode: 'degree' })}
+              >
+                Degree
+              </button>
+            </div>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={state.colorChordsByRoot}
+                onChange={(e) => onUpdate({ colorChordsByRoot: e.target.checked })}
+              />
+              Color chords by root
+            </label>
           </div>
         </div>
       </div>

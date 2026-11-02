@@ -1,8 +1,9 @@
 // Cost of moving from one grip to the next.
 // Guide tones are expensive to drag, held notes and tendency resolutions are cheap.
 
-import type { ChordToneRole } from './chords';
-import type { VoicedNote, Voicing } from './voicings';
+import { chordSymbol, type Chord, type ChordToneRole } from './chords';
+import type { GuitarString } from './tunings';
+import { generateVoicings, type VoicedNote, type Voicing, type VoicingOptions } from './voicings';
 
 export interface Weights {
   /** Cost per semitone a voice moves, by its role in the FROM chord. */
@@ -94,11 +95,15 @@ function nearestUnused(note: VoicedNote, other: VoicedNote[], used: Set<number>)
   return best;
 }
 
+function noteRole(note: VoicedNote): ChordToneRole {
+  return note.role;
+}
+
 /** Seventh falls 1 or 2 semitones onto a third. Third rises 1 semitone onto a root. */
 function resolves(from: VoicedNote, to: VoicedNote): boolean {
   const rise = to.midi - from.midi;
-  if (from.role === 'seventh' && to.role === 'third') return rise === -1 || rise === -2;
-  if (from.role === 'third' && to.role === 'root') return rise === 1;
+  if (noteRole(from) === 'seventh' && noteRole(to) === 'third') return rise === -1 || rise === -2;
+  if (noteRole(from) === 'third' && noteRole(to) === 'root') return rise === 1;
   return false;
 }
 
@@ -128,16 +133,146 @@ export function transitionCost(a: Voicing, b: Voicing, w: Weights = DEFAULT_WEIG
   const { pairs, unpaired } = pairVoices(a.notes, b.notes);
   let cost = 0;
   for (const { from, to } of pairs) {
-    cost += Math.abs(to.midi - from.midi) * w.roleMotion[from.role];
+    cost += Math.abs(to.midi - from.midi) * w.roleMotion[noteRole(from)];
     if (resolves(from, to)) cost -= w.resolutionBonus;
   }
   for (const note of unpaired) {
-    cost += w.omissionPenalty * w.roleMotion[note.role];
+    cost += w.omissionPenalty * w.roleMotion[noteRole(note)];
   }
   if (!isAllOpen(a) && !isAllOpen(b)) {
     cost += Math.abs(b.minFret - a.minFret) * w.handShift;
   }
   cost -= commonToneCount(a, b) * w.commonToneBonus;
   cost += anchorCost(b.minFret, w);
+  return cost;
+}
+
+export interface LeadOptions extends Partial<VoicingOptions> {
+  /** Grips kept per chord, the ones with the lowest voicingCost. Default 60. */
+  maxCandidates?: number;
+}
+
+const DEFAULT_MAX_CANDIDATES = 60;
+
+function voicingOptions(opts: LeadOptions): Partial<VoicingOptions> {
+  const { maxCandidates: _maxCandidates, ...rest } = opts;
+  return rest;
+}
+
+/** Lowest voicingCost first. Equal costs keep generateVoicings order. */
+function rankCandidates(voicings: Voicing[], maxCandidates: number, w: Weights): Voicing[] {
+  const ranked = voicings.map((voicing, order) => ({
+    voicing,
+    order,
+    cost: voicingCost(voicing, w),
+  }));
+  ranked.sort((a, b) => a.cost - b.cost || a.order - b.order);
+  return ranked.slice(0, maxCandidates).map((item) => item.voicing);
+}
+
+function candidatesFor(
+  chord: Chord,
+  index: number,
+  tuning: GuitarString[],
+  w: Weights,
+  opts: LeadOptions,
+): Voicing[] {
+  const base = voicingOptions(opts);
+  let found = generateVoicings(chord, tuning, base);
+  if (found.length === 0) {
+    found = generateVoicings(chord, tuning, { ...base, required: ['root'], maxSpan: 5 });
+  }
+  if (found.length === 0) {
+    throw new Error(`No playable voicing for chord ${index + 1} (${chordSymbol(chord)})`);
+  }
+  return rankCandidates(found, opts.maxCandidates ?? DEFAULT_MAX_CANDIDATES, w);
+}
+
+/**
+ * Cheapest voice-leading path. Each chord keeps a back-pointer to the
+ * predecessor that made arriving there cheapest, so a locally expensive
+ * grip can still win if it saves cost later.
+ */
+export function leadProgression(
+  chords: Chord[],
+  tuning: GuitarString[],
+  w: Weights = DEFAULT_WEIGHTS,
+  opts: LeadOptions = {},
+): Voicing[] {
+  if (chords.length === 0) return [];
+  const candidates = chords.map((chord, index) => candidatesFor(chord, index, tuning, w, opts));
+  const best: number[][] = [candidates[0].map((voicing) => voicingCost(voicing, w))];
+  const back: number[][] = [candidates[0].map(() => -1)];
+
+  for (let i = 1; i < candidates.length; i++) {
+    const prev = candidates[i - 1];
+    const curr = candidates[i];
+    const row = new Array<number>(curr.length);
+    const from = new Array<number>(curr.length);
+    for (let j = 0; j < curr.length; j++) {
+      let minCost = Infinity;
+      let arg = 0;
+      for (let k = 0; k < prev.length; k++) {
+        const cost = best[i - 1][k] + transitionCost(prev[k], curr[j], w);
+        if (cost < minCost) {
+          minCost = cost;
+          arg = k;
+        }
+      }
+      row[j] = minCost;
+      from[j] = arg;
+    }
+    best.push(row);
+    back.push(from);
+  }
+
+  const last = candidates.length - 1;
+  let chosen = 0;
+  for (let j = 1; j < best[last].length; j++) {
+    if (best[last][j] < best[last][chosen]) chosen = j;
+  }
+
+  const path = new Array<Voicing>(candidates.length);
+  for (let i = last; i >= 0; i--) {
+    path[i] = candidates[i][chosen];
+    chosen = back[i][chosen];
+  }
+  return path;
+}
+
+/** Cheapest first grip, then the cheapest step at every chord. Same candidates as leadProgression. */
+export function leadGreedy(
+  chords: Chord[],
+  tuning: GuitarString[],
+  w: Weights = DEFAULT_WEIGHTS,
+  opts: LeadOptions = {},
+): Voicing[] {
+  if (chords.length === 0) return [];
+  const candidates = chords.map((chord, index) => candidatesFor(chord, index, tuning, w, opts));
+  let index = 0;
+  for (let j = 1; j < candidates[0].length; j++) {
+    if (voicingCost(candidates[0][j], w) < voicingCost(candidates[0][index], w)) index = j;
+  }
+  const path: Voicing[] = [candidates[0][index]];
+  for (let i = 1; i < candidates.length; i++) {
+    let nextIndex = 0;
+    let nextCost = transitionCost(path[i - 1], candidates[i][0], w);
+    for (let j = 1; j < candidates[i].length; j++) {
+      const cost = transitionCost(path[i - 1], candidates[i][j], w);
+      if (cost < nextCost) {
+        nextCost = cost;
+        nextIndex = j;
+      }
+    }
+    path.push(candidates[i][nextIndex]);
+  }
+  return path;
+}
+
+/** voicingCost of the first grip, plus each transition into the next. */
+export function pathCost(path: Voicing[], w: Weights = DEFAULT_WEIGHTS): number {
+  if (path.length === 0) return 0;
+  let cost = voicingCost(path[0], w);
+  for (let i = 1; i < path.length; i++) cost += transitionCost(path[i - 1], path[i], w);
   return cost;
 }
