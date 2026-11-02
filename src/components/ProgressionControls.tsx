@@ -32,6 +32,26 @@ interface Props {
   /** Show a chord on the instruments (also switches into chord view). */
   onShowChord: (chord: Chord | null) => void;
   onGhostScale: (v: boolean) => void;
+  /** Heptatonic scale the diatonic buttons are built from (the parent, for pentatonic and similar). */
+  diatonicIntervals: number[];
+  parentName: string | null;
+  guideTones: boolean;
+  onGuideTones: (v: boolean) => void;
+  /** Restored session. Applied on mount, and again whenever loadId changes. */
+  session: ProgressionSnapshot;
+  loadId: number;
+  onSessionChange: (snap: ProgressionSnapshot) => void;
+}
+
+export interface ProgressionSnapshot {
+  chords: Chord[];
+  tempo: number;
+  beatsPerChord: number;
+  octave: number;
+  loop: boolean;
+  useSevenths: boolean;
+  spicy: boolean;
+  templateId: string;
 }
 
 // Group the quality catalog into optgroups, preserving catalog order.
@@ -51,27 +71,58 @@ const QUALITY_GROUPS = (() => {
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
 export function ProgressionControls(props: Props) {
-  const { rootPc, intervals, scalePcs, shift, active, activeChord, ghostScale, onShowChord, onGhostScale } =
-    props;
+  const {
+    rootPc,
+    intervals,
+    scalePcs,
+    shift,
+    active,
+    activeChord,
+    ghostScale,
+    onShowChord,
+    onGhostScale,
+    diatonicIntervals,
+    parentName,
+    guideTones,
+    onGuideTones,
+    session,
+    loadId,
+    onSessionChange,
+  } = props;
 
   const [, setTick] = useState(0);
   const [builderRootPc, setBuilderRootPc] = useState(rootPc);
   const [builderQuality, setBuilderQuality] = useState<ChordQuality>('maj');
-  const [progression, setProgression] = useState<Chord[]>([]);
+  const [progression, setProgression] = useState<Chord[]>(session.chords);
   const [playIndex, setPlayIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
-  const [tempo, setTempo] = useState(100);
-  const [beatsPerChord, setBeatsPerChord] = useState(2);
-  const [octave, setOctave] = useState(4);
-  const [loop, setLoop] = useState(true);
-  const [useSevenths, setUseSevenths] = useState(false);
-  const [spicy, setSpicy] = useState(false);
-  const [templateId, setTemplateId] = useState(PROGRESSION_TEMPLATES[0].id);
+  const [tempo, setTempo] = useState(session.tempo);
+  const [beatsPerChord, setBeatsPerChord] = useState(session.beatsPerChord);
+  const [octave, setOctave] = useState(session.octave);
+  const [loop, setLoop] = useState(session.loop);
+  const [useSevenths, setUseSevenths] = useState(session.useSevenths);
+  const [spicy, setSpicy] = useState(session.spicy);
+  const [templateId, setTemplateId] = useState(session.templateId);
 
   const timerRef = useRef<number | null>(null);
 
   // Re-render when the MIDI engine's state changes (to reflect readiness).
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
+
+  const onSessionRef = useRef(onSessionChange);
+  onSessionRef.current = onSessionChange;
+  useEffect(() => {
+    onSessionRef.current({
+      chords: progression,
+      tempo,
+      beatsPerChord,
+      octave,
+      loop,
+      useSevenths,
+      spicy,
+      templateId,
+    });
+  }, [progression, tempo, beatsPerChord, octave, loop, useSevenths, spicy, templateId]);
 
   const stopTimer = () => {
     if (timerRef.current !== null) {
@@ -84,6 +135,23 @@ export function ProgressionControls(props: Props) {
     setPlaying(false);
     player.stop();
   };
+
+  // Replace the working progression when a saved setup is loaded.
+  useEffect(() => {
+    if (loadId === 0) return;
+    stop();
+    setProgression(session.chords);
+    setTempo(session.tempo);
+    setBeatsPerChord(session.beatsPerChord);
+    setOctave(session.octave);
+    setLoop(session.loop);
+    setUseSevenths(session.useSevenths);
+    setSpicy(session.spicy);
+    setTemplateId(session.templateId);
+    setPlayIndex(-1);
+    // session is the snapshot captured for this loadId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadId]);
 
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
@@ -102,7 +170,9 @@ export function ProgressionControls(props: Props) {
   }));
 
   const builderChord = buildChord(builderRootPc, builderQuality);
-  const diatonicChords = [0, 1, 2, 3, 4, 5, 6].map((d) => buildDiatonicChord(rootPc, intervals, d, useSevenths));
+  const diatonicChords = diatonicIntervals.map((_, d) =>
+    buildDiatonicChord(rootPc, diatonicIntervals, d, useSevenths),
+  );
   const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
@@ -243,7 +313,9 @@ export function ProgressionControls(props: Props) {
 
       {/* One-click diatonic chords of the current key */}
       <div className="prog-row">
-        <span className="prog-sublabel">Diatonic</span>
+        <span className="prog-sublabel" title={parentName ? `From the ${parentName} of this root` : undefined}>
+          Diatonic
+        </span>
         <div className="btn-row">
           {diatonicChords.map((ch, d) => (
             <button key={d} className="btn-mini" title={chordSymbol(ch, shift)} onClick={() => addChord(ch)}>
@@ -369,6 +441,9 @@ export function ProgressionControls(props: Props) {
         <label className="checkbox-row">
           <input type="checkbox" checked={ghostScale} onChange={(e) => onGhostScale(e.target.checked)} /> Ghost key
           notes
+        </label>
+        <label className="checkbox-row" title="Keep the chord on the neck and mark its 3rd and 7th. A line shows their shortest step from the previous chord.">
+          <input type="checkbox" checked={guideTones} onChange={(e) => onGuideTones(e.target.checked)} /> Guide tones
         </label>
       </div>
     </div>

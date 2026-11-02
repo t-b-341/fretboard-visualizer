@@ -30,6 +30,8 @@ class WebAudioSynth {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private voices = new Set<Voice>();
+  /** Held root. Kept out of `voices` so melodic stop() does not cut the drone. */
+  private drone: Voice | null = null;
   private _volume = 0.5; // 0-1
   private _muted = false;
   private listeners = new Set<Listener>();
@@ -175,6 +177,46 @@ class WebAudioSynth {
     const vel = opts.velocity ?? 100;
     const now = ctx.currentTime + 0.02;
     midis.forEach((m, i) => this.voiceOn(ctx, midiToFreq(m), now + i * beat, beat * gate, vel));
+  }
+
+  /**
+   * Sustain the root under whatever else is playing. Replaces any previous drone.
+   * Must be called from a click the first time, so the audio context can start.
+   */
+  startDrone(midi: number) {
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    this.stopDrone();
+    const g = ctx.createGain();
+    g.gain.value = 0.07;
+    g.connect(this.master);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = midiToFreq(midi);
+    o.connect(g);
+    o.start();
+    this.drone = { oscillators: [o], gain: g };
+  }
+
+  stopDrone() {
+    if (!this.drone || !this.ctx) {
+      this.drone = null;
+      return;
+    }
+    const now = this.ctx.currentTime;
+    try {
+      this.drone.gain.gain.setTargetAtTime(0.0001, now, 0.03);
+      this.drone.oscillators.forEach((o) => {
+        try {
+          o.stop(now + 0.15);
+        } catch {
+          /* already stopped */
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+    this.drone = null;
   }
 
   /** Play a single note (e.g. click-to-hear). */

@@ -51,6 +51,8 @@ class MidiEngine {
 
   private timers: number[] = [];
   private sounding = new Set<number>();
+  /** MIDI note held as a drone. Note-offs for this pitch are ignored. */
+  private drone: number | null = null;
   private listeners = new Set<Listener>();
 
   get supported(): boolean {
@@ -137,8 +139,30 @@ class MidiEngine {
     const p = this.port();
     if (!p) return;
     const n = midi & 0x7f;
+    if (n === this.drone) return;
     p.send([0x80 | this.channel, n, 0]);
     this.sounding.delete(n);
+  }
+
+  /** Hold a root on the external device. Survives stop(), which re-sounds it. */
+  startDrone(midi: number) {
+    const n = midi & 0x7f;
+    const p = this.port();
+    if (this.drone !== null && this.drone !== n) {
+      const prev = this.drone;
+      this.drone = null;
+      this.sendOff(prev);
+    }
+    this.drone = n;
+    if (!p) return;
+    p.send([0x90 | this.channel, n, 64]);
+  }
+
+  stopDrone() {
+    if (this.drone === null) return;
+    const n = this.drone;
+    this.drone = null;
+    this.sendOff(n);
   }
 
   /** Play notes one after another (a scale run). */
@@ -173,6 +197,7 @@ class MidiEngine {
   playNote(midi: number, durationMs = 500, velocity = 100) {
     if (!this.port()) return;
     this.sendOn(midi, velocity);
+    if ((midi & 0x7f) === this.drone) return;
     this.timers.push(window.setTimeout(() => this.sendOff(midi), durationMs));
   }
 
@@ -186,6 +211,7 @@ class MidiEngine {
       p.send([0xb0 | this.channel, 123, 0]); // CC 123 = All Notes Off
     }
     this.sounding.clear();
+    if (this.drone !== null && p) p.send([0x90 | this.channel, this.drone, 64]);
   }
 }
 

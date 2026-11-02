@@ -17,6 +17,11 @@ interface Props {
   activeChordSymbol?: string;
   activeChordRoman?: string;
   activeChordInKey?: boolean;
+  /** Colour each scale degree instead of root vs scale tone. */
+  colorByDegree: boolean;
+  degreeLabels: string[];
+  /** Chord view is marking the 3rd and 7th inside the chord. */
+  guideTones?: boolean;
 }
 
 export function Legend(props: Props) {
@@ -35,6 +40,9 @@ export function Legend(props: Props) {
     activeChordSymbol,
     activeChordRoman,
     activeChordInKey,
+    colorByDegree,
+    degreeLabels,
+    guideTones,
   } = props;
 
   const chordView = viewMode === 'chord';
@@ -80,7 +88,14 @@ export function Legend(props: Props) {
             <Item cls="fifth" label="5th" />
             <Item cls="seventh" label="6th / 7th" />
             <Item cls="ext" label="9 / 11 / 13" />
-            <span className="legend-note muted">Dashed ring = note outside the key</span>
+            {guideTones && (
+              <span className="legend-item">
+                <span className="swatch swatch-guide" /> Guide tone
+              </span>
+            )}
+            <span className="legend-note muted">
+              {guideTones ? 'Red dashed ring = note outside the key' : 'Dashed ring = note outside the key'}
+            </span>
           </>
         ) : comparingScale ? (
           <>
@@ -95,6 +110,15 @@ export function Legend(props: Props) {
             <Item cls="fifth" label="5th" />
             <Item cls="scale" label="Scale tone" />
             <span className="legend-note muted">Dashed ring = chord tone outside the scale</span>
+          </>
+        ) : viewMode === 'scale' && colorByDegree ? (
+          <>
+            {degreeLabels.map((label, i) => (
+              <span key={label + i} className="legend-item">
+                <span className={`swatch swatch-deg swatch-deg-${i}`} /> {label}
+              </span>
+            ))}
+            <span className="legend-note muted">Ring marks the root</span>
           </>
         ) : viewMode === 'scale' ? (
           <>

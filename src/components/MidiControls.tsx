@@ -9,16 +9,40 @@ interface Props {
   rootPc: number;
   intervals: number[];
   triad: Triad;
+  soundOctave: number;
+  onSoundOctave: (octave: number) => void;
+  drone: boolean;
+  onDrone: (on: boolean) => void;
+  clickToHear: boolean;
+  onClickToHear: (on: boolean) => void;
 }
 
 type Status = 'idle' | 'enabling' | 'ready' | 'unsupported' | 'denied';
 
-export function MidiControls({ rootPc, intervals, triad }: Props) {
+export function MidiControls({
+  rootPc,
+  intervals,
+  triad,
+  soundOctave,
+  onSoundOctave,
+  drone,
+  onDrone,
+  clickToHear,
+  onClickToHear,
+}: Props) {
   const [, setTick] = useState(0);
   const [status, setStatus] = useState<Status>(midiEngine.enabled ? 'ready' : 'idle');
   const [channel, setChannel] = useState(1);
-  const [octave, setOctave] = useState(4);
   const [bpm, setBpm] = useState(120);
+  const droneMidi = (soundOctave + 1) * 12 + rootPc;
+
+  // Retune a sounding drone when the root or octave changes. The first start
+  // also happens in the click handler so the audio context is allowed to run.
+  useEffect(() => {
+    if (drone) player.startDrone(droneMidi);
+    else player.stopDrone();
+  }, [drone, droneMidi]);
+  useEffect(() => () => player.stopDrone(), []);
 
   // Re-render when the MIDI device list / selection or synth settings change.
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
@@ -42,8 +66,8 @@ export function MidiControls({ rootPc, intervals, triad }: Props) {
   // Playback works through the built-in synth even with no MIDI device.
   const soundReady = synth.supported || hasOutput;
 
-  const playScale = () => player.playSequence(scaleToMidi(rootPc, intervals, octave), { bpm });
-  const playChord = () => player.playChord(triadToMidi(triad.pitches, octave));
+  const playScale = () => player.playSequence(scaleToMidi(rootPc, intervals, soundOctave), { bpm });
+  const playChord = () => player.playChord(triadToMidi(triad.pitches, soundOctave));
 
   return (
     <div className="midi-bar">
@@ -71,9 +95,27 @@ export function MidiControls({ rootPc, intervals, triad }: Props) {
         />
       </label>
 
+      <button
+        className={`btn-mini${drone ? ' active' : ''}`}
+        onClick={() => {
+          const next = !drone;
+          onDrone(next);
+          if (next) player.startDrone(droneMidi);
+          else player.stopDrone();
+        }}
+        disabled={!synth.supported}
+        title="Hold the root under the scale"
+      >
+        Drone
+      </button>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={clickToHear} onChange={(e) => onClickToHear(e.target.checked)} />
+        Click notes
+      </label>
+
       <label className="midi-field">
         Octave
-        <select value={octave} onChange={(e) => setOctave(Number(e.target.value))}>
+        <select value={soundOctave} onChange={(e) => onSoundOctave(Number(e.target.value))}>
           {[2, 3, 4, 5, 6].map((o) => (
             <option key={o} value={o}>
               {o}

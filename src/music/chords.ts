@@ -37,7 +37,7 @@ function qualityFromSpans(thirdSemis: number, fifthSemis: number): TriadQuality 
 }
 
 function romanLabel(degree: number, quality: TriadQuality): string {
-  const base = ROMAN[degree];
+  const base = ROMAN[degree] ?? String(degree + 1);
   if (quality === 'maj') return base;
   if (quality === 'aug') return base + '+';
   const lower = base.toLowerCase();
@@ -45,10 +45,11 @@ function romanLabel(degree: number, quality: TriadQuality): string {
 }
 
 export function getDiatonicTriad(rootPc: number, intervals: number[], degree: number): Triad {
-  const d = mod(degree, 7);
+  const n = Math.max(1, intervals.length);
+  const d = mod(degree, n);
   const i1 = d;
-  const i3 = mod(d + 2, 7);
-  const i5 = mod(d + 4, 7);
+  const i3 = mod(d + 2, n);
+  const i5 = mod(d + 4, n);
 
   const rootInt = intervals[i1];
   // Raise wrapped upper tones by an octave to measure true stacked-third spans.
@@ -297,11 +298,12 @@ export function buildDiatonicChord(
   degree: number,
   withSeventh: boolean,
 ): Chord {
-  const d = mod(degree, 7);
+  const n = Math.max(1, intervals.length);
+  const d = mod(degree, n);
   const rootInt = intervals[d];
   const chordRootPc = mod(keyRootPc + rootInt, 12);
 
-  const spanAt = (k: number) => mod(intervals[mod(d + k, 7)] - rootInt, 12);
+  const spanAt = (k: number) => mod(intervals[mod(d + k, n)] - rootInt, 12);
   const thirdSpan = spanAt(2);
   const fifthSpan = spanAt(4);
   const seventhSpan = withSeventh ? spanAt(6) : null;

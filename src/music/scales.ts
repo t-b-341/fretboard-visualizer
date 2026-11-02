@@ -1,16 +1,24 @@
 // Scale families, their modes, and helpers for turning a root + interval set
 // into concrete pitch classes and proper scale-degree labels.
 
-import { mod } from './notes';
+import { chromaticDegreeLabel, mod } from './notes';
 
-export type FamilyKey = 'major' | 'melodicMinor' | 'harmonicMinor' | 'harmonicMajor';
+export type FamilyKey =
+  | 'major'
+  | 'melodicMinor'
+  | 'harmonicMinor'
+  | 'harmonicMajor'
+  | 'pentatonic'
+  | 'blues'
+  | 'diminished'
+  | 'wholeTone';
 
 export interface ModeDef {
   /** Stable internal key, e.g. "Dorian". */
   key: string;
   /** Display name shown in the UI. */
   name: string;
-  /** Semitones from the root, ascending, length 7, starting at 0. */
+  /** Semitones from the root, ascending, starting at 0. */
   intervals: number[];
 }
 
@@ -74,6 +82,38 @@ export const SCALE_FAMILIES: FamilyDef[] = [
       { key: 'Locrianbb7', name: 'Locrian bb7 (Diminished)', intervals: [0, 1, 3, 5, 6, 8, 9] },
     ],
   },
+  {
+    key: 'pentatonic',
+    name: 'Pentatonic',
+    modes: [
+      { key: 'MajorPent', name: 'Major pentatonic', intervals: [0, 2, 4, 7, 9] },
+      { key: 'SuspendedPent', name: 'Suspended pentatonic', intervals: [0, 2, 5, 7, 10] },
+      { key: 'Pentb6', name: 'Pentatonic b6', intervals: [0, 3, 5, 8, 10] },
+      { key: 'PentMode4', name: 'Pentatonic mode 4', intervals: [0, 2, 5, 7, 9] },
+      { key: 'MinorPent', name: 'Minor pentatonic', intervals: [0, 3, 5, 7, 10] },
+    ],
+  },
+  {
+    key: 'blues',
+    name: 'Blues',
+    modes: [
+      { key: 'MinorBlues', name: 'Minor blues', intervals: [0, 3, 5, 6, 7, 10] },
+      { key: 'MajorBlues', name: 'Major blues', intervals: [0, 2, 3, 4, 7, 9] },
+    ],
+  },
+  {
+    key: 'diminished',
+    name: 'Diminished',
+    modes: [
+      { key: 'HalfWhole', name: 'Half-whole (dominant)', intervals: [0, 1, 3, 4, 6, 7, 9, 10] },
+      { key: 'WholeHalf', name: 'Whole-half', intervals: [0, 2, 3, 5, 6, 8, 9, 11] },
+    ],
+  },
+  {
+    key: 'wholeTone',
+    name: 'Whole Tone',
+    modes: [{ key: 'WholeTone', name: 'Whole tone', intervals: [0, 2, 4, 6, 8, 10] }],
+  },
 ];
 
 export function getFamily(key: FamilyKey): FamilyDef {
@@ -90,13 +130,39 @@ export function getScaleNotes(rootPc: number, intervals: number[]): number[] {
 const MAJOR_REF = [0, 2, 4, 5, 7, 9, 11];
 
 /**
- * Proper scale-degree label for the n-th tone (0-based) of a heptatonic scale,
- * spelled relative to the major scale: "1", "b3", "#4", "bb7", etc.
+ * Proper scale-degree label for the n-th tone (0-based) of a scale.
+ * Heptatonic scales are spelled against the major scale ("1", "b3", "#4", "bb7").
+ * Other sizes are spelled from the interval itself ("1", "b3", "5", "6"), because
+ * there is no generic 4th or 7th slot to alter.
  */
 export function scaleDegreeLabel(intervals: number[], index: number): string {
+  const semi = intervals[index];
+  if (semi === undefined) return '';
+  if (intervals.length !== 7 || index > 6) return chromaticDegreeLabel(semi);
   const degreeNumber = index + 1; // 1..7
-  const diff = intervals[index] - MAJOR_REF[index];
-  const acc =
-    diff === 0 ? '' : diff < 0 ? 'b'.repeat(-diff) : '#'.repeat(diff);
+  const diff = semi - MAJOR_REF[index];
+  const acc = diff === 0 ? '' : diff < 0 ? 'b'.repeat(-diff) : '#'.repeat(diff);
   return `${acc}${degreeNumber}`;
+}
+
+/** Degree spelling of a scale, one label per tone, in ascending order. */
+export function scaleFormulaLabels(intervals: number[]): string[] {
+  return intervals.map((_, i) => scaleDegreeLabel(intervals, i));
+}
+
+/**
+ * Heptatonic scale used for diatonic triads and progression templates.
+ * Seven-note modes use themselves. Pentatonic, blues, diminished, and whole-tone
+ * sets borrow the parallel major (if the scale has a major third) or natural minor.
+ */
+export function parentScale(intervals: number[]): { intervals: number[]; name: string | null } {
+  if (intervals.length === 7) return { intervals, name: null };
+  const minorish = intervals.includes(3) && !intervals.includes(4);
+  return minorish
+    ? { intervals: [0, 2, 3, 5, 7, 8, 10], name: 'natural minor' }
+    : { intervals: [0, 2, 4, 5, 7, 9, 11], name: 'major' };
+}
+
+export function parentIntervals(intervals: number[]): number[] {
+  return parentScale(intervals).intervals;
 }

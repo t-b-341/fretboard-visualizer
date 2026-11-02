@@ -92,8 +92,20 @@ input:focus {
   background: var(--accent);
   color: #fff;
 }
-.segmented button + button {
+.segmented > * + * {
   border-left: 1px solid var(--border);
+}
+.segmented button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.segmented .segment-value {
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 2.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Per-string tuning editor */
@@ -154,6 +166,14 @@ input:focus {
 }
 .keyboard {
   display: block;
+}
+.keyboard-caption {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.keyboard-range-note {
+  font-size: 12px;
 }
 .pkey-white {
   fill: #eef2f8;
@@ -240,6 +260,17 @@ input:focus {
   stroke-width: 2.5;
   pointer-events: none;
 }
+.note-guide-ring {
+  fill: none;
+  stroke: #ffd36b;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+  pointer-events: none;
+}
+.swatch-guide {
+  background: transparent;
+  border: 2px dashed #ffd36b;
+}
 
 .note-label {
   fill: #fff;
@@ -247,6 +278,9 @@ input:focus {
   font-weight: 700;
   font-family: inherit;
   pointer-events: none;
+}
+.note-label-long {
+  font-size: 8px;
 }
 .note-label-fifth {
   fill: #1a1304;
@@ -352,6 +386,174 @@ input:focus {
 }
 .btn-mini:hover {
   border-color: var(--accent);
+}
+.btn-mini.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-mini:disabled,
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.setup-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.setup-bar .group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.setup-name {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.str-toggles {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.str-toggles button {
+  min-width: 28px;
+  padding: 5px 0;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.str-toggles button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.formula-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.formula-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.formula-k {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.formula-token {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.formula-caption {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.45;
+}
+.formula-degree,
+.formula-detail {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+}
+.formula-pull {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--accent);
+}
+.formula-deg {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.formula-deg-0 { color: var(--deg-0); }
+.formula-deg-1 { color: var(--deg-1); }
+.formula-deg-2 { color: var(--deg-2); }
+.formula-deg-3 { color: var(--deg-3); }
+.formula-deg-4 { color: var(--deg-4); }
+.formula-deg-5 { color: var(--deg-5); }
+.formula-deg-6 { color: var(--deg-6); }
+.formula-deg-7 { color: var(--deg-7); }
+
+.board-caption {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.guide-line {
+  stroke: #ffd36b;
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  fill: none;
+  opacity: 0.9;
+  pointer-events: none;
+}
+.note-hit {
+  cursor: pointer;
+}
+.note-target {
+  fill: transparent;
+}
+.note-label-ink {
+  fill: #1a1304;
+}
+.note-deg-0 { fill: var(--deg-0); }
+.note-deg-1 { fill: var(--deg-1); }
+.note-deg-2 { fill: var(--deg-2); }
+.note-deg-3 { fill: var(--deg-3); }
+.note-deg-4 { fill: var(--deg-4); }
+.note-deg-5 { fill: var(--deg-5); }
+.note-deg-6 { fill: var(--deg-6); }
+.note-deg-7 { fill: var(--deg-7); }
+
+.swatch-deg-0 { background: var(--deg-0); }
+.swatch-deg-1 { background: var(--deg-1); }
+.swatch-deg-2 { background: var(--deg-2); }
+.swatch-deg-3 { background: var(--deg-3); }
+.swatch-deg-4 { background: var(--deg-4); }
+.swatch-deg-5 { background: var(--deg-5); }
+.swatch-deg-6 { background: var(--deg-6); }
+.swatch-deg-7 { background: var(--deg-7); }
+
+.keyboard.keys-live .pkey-white,
+.keyboard.keys-live .pkey-black {
+  cursor: pointer;
+}
+.keyboard .note,
+.keyboard .note-ghost,
+.keyboard .note-root-ring,
+.keyboard .note-guide-ring,
+.keyboard .note-outside-ring,
+.keyboard .note-label,
+.keyboard .key-dot {
+  pointer-events: none;
 }
 
 /* Chord tone that lies outside the overlaid scale (triad compare) */
