@@ -19,7 +19,7 @@ import type { ShapeMode } from '../music/shapes';
 import { defaultPresetForStrings } from '../music/tunings';
 import type { GuitarString } from '../music/tunings';
 import type { VoicingStyle } from '../music/voicings';
-import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from '../music/types';
+import type { DisplayMode, InstrumentView, LabelMode, StaffPitch, ViewMode } from '../music/types';
 
 export type ColorMode = 'role' | 'degree';
 
@@ -41,6 +41,10 @@ export interface AppState {
   labelMode: LabelMode;
   displayMode: DisplayMode;
   instrumentView: InstrumentView;
+  /** Grand staff. Off when an older setup has no value for it. */
+  showStaff: boolean;
+  /** Concert pitch, or guitar notation an octave higher on one treble staff. */
+  staffPitch: StaffPitch;
   keyboardOctaves: 1 | 2 | 3;
   /** True once the span buttons have been used. Older sessions open on 37 keys. */
   keyboardSpanChosen: boolean;
@@ -104,6 +108,8 @@ export function createInitialState(): AppState {
     labelMode: 'concert',
     displayMode: 'note',
     instrumentView: 'both',
+    showStaff: false,
+    staffPitch: 'concert',
     keyboardOctaves: 3,
     keyboardSpanChosen: true,
     controllerBaseOctave: 3,
@@ -284,6 +290,8 @@ export function mergeApp(raw: unknown): AppState {
     labelMode: raw.labelMode === 'standard' ? 'standard' : 'concert',
     displayMode: raw.displayMode === 'degree' ? 'degree' : 'note',
     instrumentView: raw.instrumentView === 'fretboard' || raw.instrumentView === 'keyboard' ? raw.instrumentView : 'both',
+    showStaff: raw.showStaff === true,
+    staffPitch: raw.staffPitch === 'guitar' ? 'guitar' : 'concert',
     // Until the span buttons are used, show the 37-key controller. A saved
     // 2-octave view from before that option existed would otherwise stick.
     keyboardOctaves: raw.keyboardSpanChosen === true

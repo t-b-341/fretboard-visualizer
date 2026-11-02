@@ -6,7 +6,7 @@ Fretboard and piano keyboard for scales, chords, and progressions on 6-string ba
 
 ### Instruments
 
-6-string bass presets are Bb standard and standard. 7- and 8-string presets are standard and half-step down. Each string can be retuned by pitch class. Show the fretboard, the keyboard, or both. The keyboard span is 1 octave, 2 octaves, or 37 keys. The neck is 12 to 24 frets.
+6-string bass presets are Bb standard and standard. 7- and 8-string presets are standard and half-step down. Each string can be retuned by pitch class. Show the fretboard, the keyboard, the grand staff, or any combination. The staff stays off for setups saved before it existed. Concert pitch is sounding pitch on the grand staff. Guitar written is one treble staff with an 8 under the clef, an octave higher than it sounds. The Concert / Standard label control does not move the notes; with Standard on, a line under the staff says the names are a semitone higher. A note more than four ledger lines below its staff is written an octave higher and marked 8vb. The keyboard span is 1 octave, 2 octaves, or 37 keys. The neck is 12 to 24 frets.
 
 ### Scales
 
@@ -21,7 +21,7 @@ Fretboard and piano keyboard for scales, chords, and progressions on 6-string ba
 - Diminished: half-whole, whole-half.
 - Whole tone.
 
-A second scale can be overlaid. Shared notes only draws tones that belong to both. Labels are note names or scale degrees. Concert shows the sounding pitch. Standard adds one semitone to the displayed name. Fret positions stay the same.
+A second scale can be overlaid. Shared notes only draws tones that belong to both. Labels are note names or scale degrees. Concert shows the sounding pitch. Standard adds one semitone to the displayed name. Fret positions stay the same. The staff keeps concert pitch either way.
 
 ### Chords
 
@@ -69,7 +69,7 @@ Open the localhost URL Vite prints.
 | `src/state/appState.ts` | `AppState` shape, defaults, and the localStorage merge |
 | `src/state/derive.ts` | Scale intervals, pitch-class index, spelling, active chord, highlight evaluator, and voicings |
 | `src/state/setups.ts` | Last session and named setups in `localStorage` (`fretboard-visualizer:setups:v1`) |
-| `src/components` | Fretboard, keyboard, controls, legend, progression bar, sound controls, and the setup, formula, quiz, and identify panels |
-| `src/music` | Scales, chords, voicings, voice leading, quiz, identify, tunings, and the fretboard grid |
+| `src/components` | Fretboard, keyboard, grand staff, controls, legend, progression bar, sound controls, and the setup, formula, quiz, and identify panels |
+| `src/music` | Scales, chords, voicings, voice leading, staff notation, quiz, identify, tunings, and the fretboard grid |
 | `src/audio` | Built-in synth, Web MIDI output, playback, and `.mid` export |
 | `src/urlState.ts` | Address-bar encoding of the neck setup |

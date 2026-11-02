@@ -76,7 +76,7 @@ export function spellingMap(
   return { scaleSpelling, spelling };
 }
 
-/** The pitch-class evaluator both instrument views draw from. */
+/** The pitch-class evaluator the instrument views draw from. */
 export function highlightEvaluator(ctx: HighlightContext) {
   return createEvaluator(ctx);
 }

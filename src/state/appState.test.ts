@@ -25,6 +25,15 @@ describe('mergeApp', () => {
     expect(createInitialState().colorChordsByRoot).toBe(true);
   });
 
+  it('leaves the staff off when an older setup has no staff flag', () => {
+    expect(createInitialState().showStaff).toBe(false);
+    expect(createInitialState().staffPitch).toBe('concert');
+    expect(mergeApp({ rootPc: 0 }).showStaff).toBe(false);
+    expect(mergeApp({ rootPc: 0 }).staffPitch).toBe('concert');
+    expect(mergeApp({ showStaff: true, staffPitch: 'guitar' }).showStaff).toBe(true);
+    expect(mergeApp({ showStaff: true, staffPitch: 'guitar' }).staffPitch).toBe('guitar');
+  });
+
   it('fills note-quiz settings when an older setup has none', () => {
     const loaded = mergeApp({ rootPc: 2 });
     expect(loaded.noteQuiz).toEqual(defaultNoteQuizSettings(loaded.numStrings, loaded.fretCount));

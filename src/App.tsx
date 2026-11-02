@@ -3,6 +3,7 @@ import './App.css';
 import { Controls } from './components/Controls';
 import { FormulaBar } from './components/FormulaBar';
 import { Fretboard } from './components/Fretboard';
+import { GrandStaff } from './components/GrandStaff';
 import { IdentifyPanel } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
@@ -74,7 +75,7 @@ export default function App() {
       <header className="app-header">
         <h1>Fretboard Visualizer</h1>
         <p className="subtitle">
-          6-string bass, 7/8-string guitar &amp; keyboard &middot; scales, modes &amp; diatonic triads
+          6-string bass, 7/8-string guitar, keyboard &amp; staff &middot; scales, modes &amp; diatonic triads
         </p>
       </header>
 
@@ -243,6 +244,24 @@ export default function App() {
             colorByDegree={derived.colorByDegree}
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateKeyboard}
+            onPlay={(midi) => player.playNote(midi, 420)}
+          />
+        )}
+        {state.showStaff && (
+          <GrandStaff
+            viewMode={state.viewMode}
+            rootPc={state.rootPc}
+            intervals={derived.intervals}
+            chord={derived.voicedChord}
+            voicingMidis={derived.shownVoicing ? derived.shownVoicing.notes.map((note) => note.midi) : null}
+            pickedMidis={derived.pickedNotes.map((note) => note.midi)}
+            guitarWritten={state.staffPitch === 'guitar'}
+            onGuitarWritten={(guitarWritten) => update({ staffPitch: guitarWritten ? 'guitar' : 'concert' })}
+            labelMode={state.labelMode}
+            colorByDegree={derived.colorByDegree}
+            compareEnabled={state.compareEnabled}
+            clickToHear={state.clickToHear}
+            evaluate={derived.evaluateFretboard}
             onPlay={(midi) => player.playNote(midi, 420)}
           />
         )}

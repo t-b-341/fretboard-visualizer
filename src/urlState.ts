@@ -3,12 +3,13 @@ import type { FamilyKey } from './music/scales';
 import { SCALE_FAMILIES, getFamily } from './music/scales';
 import type { GuitarString } from './music/tunings';
 import { defaultPresetForStrings, getPreset } from './music/tunings';
-import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
+import type { DisplayMode, InstrumentView, LabelMode, StaffPitch, ViewMode } from './music/types';
 
 const VIEW_MODES = ['scale', 'triad', 'chord', 'identify', 'quiz'] as const satisfies readonly ViewMode[];
 const LABEL_MODES = ['concert', 'standard'] as const satisfies readonly LabelMode[];
 const DISPLAY_MODES = ['note', 'degree'] as const satisfies readonly DisplayMode[];
 const INSTRUMENT_VIEWS = ['fretboard', 'keyboard', 'both'] as const satisfies readonly InstrumentView[];
+const STAFF_PITCHES = ['concert', 'guitar'] as const satisfies readonly StaffPitch[];
 
 function fromDefaults(defaults: AppState): AppState {
   return {
@@ -119,6 +120,8 @@ export function encodeState(s: AppState, defaults: AppState): string {
   if (s.labelMode !== defaults.labelMode) put('l', s.labelMode);
   if (s.displayMode !== defaults.displayMode) put('d', s.displayMode);
   if (s.instrumentView !== defaults.instrumentView) put('i', s.instrumentView);
+  if (s.showStaff !== defaults.showStaff) put('sf', s.showStaff ? 1 : 0);
+  if (s.staffPitch !== defaults.staffPitch) put('sp', s.staffPitch);
   if (s.ghostScale !== defaults.ghostScale) put('g', s.ghostScale ? 1 : 0);
   if (s.compareEnabled !== defaults.compareEnabled) put('c', s.compareEnabled ? 1 : 0);
   if (s.compareRootPc !== defaults.compareRootPc) put('ck', s.compareRootPc);
@@ -149,6 +152,8 @@ export function decodeState(search: string, defaults: AppState): AppState {
     apply(next, 'labelMode', oneOf(params.get('l'), LABEL_MODES));
     apply(next, 'displayMode', oneOf(params.get('d'), DISPLAY_MODES));
     apply(next, 'instrumentView', oneOf(params.get('i'), INSTRUMENT_VIEWS));
+    apply(next, 'showStaff', readBit(params.get('sf')));
+    apply(next, 'staffPitch', oneOf(params.get('sp'), STAFF_PITCHES));
 
     apply(next, 'ghostScale', readBit(params.get('g')));
     apply(next, 'compareEnabled', readBit(params.get('c')));

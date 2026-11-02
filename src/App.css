@@ -182,6 +182,88 @@ input:focus {
 .keyboard-range-note {
   font-size: 12px;
 }
+
+/* Grand staff */
+.staff-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+}
+.staff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 8px;
+}
+.staff-toolbar-note,
+.staff-footnote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.staff-footnote {
+  margin-top: 8px;
+}
+.staff {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.staff-line,
+.staff-ledger,
+.staff-bar {
+  stroke: var(--text);
+  fill: none;
+}
+.staff-line {
+  stroke-width: 1.15;
+}
+.staff-ledger {
+  stroke-width: 1.45;
+  stroke-linecap: round;
+}
+.staff-bar {
+  stroke-width: 1.45;
+}
+.staff-ink {
+  color: var(--text);
+  fill: currentColor;
+}
+.staff-brace {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.staff-clef-glyph {
+  fill: var(--text);
+  font-family: "Segoe UI Symbol", "Noto Music", "Bravura Text", "Apple Symbols", "FreeSerif", serif;
+}
+.staff-clef-treble {
+  font-size: 74px;
+}
+.staff-clef-bass {
+  font-size: 58px;
+}
+.staff-clef-eight,
+.staff-ottava {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+}
+.staff-ottava {
+  font-size: 11px;
+  font-weight: 650;
+}
+.staff.staff-live .staff-notehead {
+  cursor: pointer;
+}
 .pkey-white {
   fill: #eef2f8;
   stroke: #243040;

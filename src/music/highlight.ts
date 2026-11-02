@@ -1,6 +1,6 @@
 // Shared pitch-class highlighting logic.
 //
-// Both instrument views (fretboard, keyboard, ...) ask the same question of a
+// The instrument views (fretboard, keyboard, staff) ask the same question of a
 // pitch class: "should I draw this note, and if so with what colour and label?"
 // Keeping that answer in one place guarantees a given note looks identical no
 // matter which diagram it is drawn on.

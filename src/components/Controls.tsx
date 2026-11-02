@@ -507,6 +507,15 @@ export function Controls(props: Props) {
                 {v === 'fretboard' ? 'Fretboard' : v === 'keyboard' ? 'Keyboard' : 'Both'}
               </button>
             ))}
+            <button
+              type="button"
+              className={state.showStaff ? 'active' : ''}
+              aria-pressed={state.showStaff}
+              title="Grand staff"
+              onClick={() => onUpdate({ showStaff: !state.showStaff })}
+            >
+              Staff
+            </button>
           </div>
         </div>
         {state.instrumentView !== 'fretboard' && (
