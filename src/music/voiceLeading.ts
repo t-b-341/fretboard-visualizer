@@ -96,7 +96,7 @@ function nearestUnused(note: VoicedNote, other: VoicedNote[], used: Set<number>)
 }
 
 function noteRole(note: VoicedNote): ChordToneRole {
-  return note.role ?? 'ext';
+  return note.role;
 }
 
 /** Seventh falls 1 or 2 semitones onto a third. Third rises 1 semitone onto a root. */

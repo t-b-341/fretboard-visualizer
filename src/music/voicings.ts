@@ -17,7 +17,7 @@ export interface VoicedNote {
   fret: number;
   midi: number;
   pc: number;
-  role?: ChordToneRole;
+  role: ChordToneRole;
   degree?: string;
 }
 
@@ -211,14 +211,19 @@ export interface Voicing {
   span: number;
 }
 
-/** Pack sounding notes into a grip. Open strings (fret 0) do not set minFret, maxFret, or span. */
-export function toVoicing(notes: VoicedNote[], stringCount: number): Voicing {
-  const frets: (number | null)[] = new Array(stringCount).fill(null);
+/**
+ * Pack sounding notes into a grip. Open strings (fret 0) do not set minFret, maxFret, or span.
+ * `stringCount` sizes the mute map; when omitted it is one past the highest string index.
+ */
+export function toVoicing(notes: VoicedNote[], stringCount?: number): Voicing {
+  const count =
+    stringCount ?? notes.reduce((highest, note) => Math.max(highest, note.stringIndex + 1), 0);
+  const frets: (number | null)[] = new Array(count).fill(null);
   let minFret = 0;
   let maxFret = 0;
   let fretted = false;
   for (const note of notes) {
-    if (note.stringIndex >= 0 && note.stringIndex < stringCount) {
+    if (note.stringIndex >= 0 && note.stringIndex < count) {
       frets[note.stringIndex] = note.fret;
     }
     if (note.fret > 0) {

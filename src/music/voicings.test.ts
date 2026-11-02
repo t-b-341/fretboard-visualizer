@@ -49,9 +49,9 @@ describe('toVoicing', () => {
   it('computes minFret and span from fretted notes, with and without open strings', () => {
     const closed = toVoicing(
       [
-        { stringIndex: 4, fret: 7, midi: 62, pc: 2 },
-        { stringIndex: 2, fret: 3, midi: 48, pc: 0 },
-        { stringIndex: 3, fret: 5, midi: 55, pc: 7 },
+        { stringIndex: 4, fret: 7, midi: 62, pc: 2, role: 'ext' },
+        { stringIndex: 2, fret: 3, midi: 48, pc: 0, role: 'ext' },
+        { stringIndex: 3, fret: 5, midi: 55, pc: 7, role: 'ext' },
       ],
       7,
     );
@@ -63,9 +63,9 @@ describe('toVoicing', () => {
 
     const withOpen = toVoicing(
       [
-        { stringIndex: 5, fret: 8, midi: 67, pc: 7 },
-        { stringIndex: 1, fret: 0, midi: 40, pc: 4 },
-        { stringIndex: 3, fret: 5, midi: 55, pc: 7 },
+        { stringIndex: 5, fret: 8, midi: 67, pc: 7, role: 'ext' },
+        { stringIndex: 1, fret: 0, midi: 40, pc: 4, role: 'ext' },
+        { stringIndex: 3, fret: 5, midi: 55, pc: 7, role: 'ext' },
       ],
       7,
     );
@@ -77,8 +77,8 @@ describe('toVoicing', () => {
 
     const allOpen = toVoicing(
       [
-        { stringIndex: 4, fret: 0, midi: 55, pc: 7 },
-        { stringIndex: 1, fret: 0, midi: 40, pc: 4 },
+        { stringIndex: 4, fret: 0, midi: 55, pc: 7, role: 'ext' },
+        { stringIndex: 1, fret: 0, midi: 40, pc: 4, role: 'ext' },
       ],
       7,
     );

@@ -4,7 +4,7 @@ import { midiOf, noteAt } from './fretboard';
 import { mod } from './notes';
 import { getFamily } from './scales';
 import { getPreset, type GuitarString } from './tunings';
-import { generateVoicings, type Voicing, type VoicedNote } from './voicings';
+import { findVoicings, generateVoicings, toVoicing, type Voicing, type VoicedNote } from './voicings';
 import {
   DEFAULT_WEIGHTS,
   leadGreedy,
@@ -356,6 +356,49 @@ describe('leadProgression', () => {
     expect(leadProgression([], halfDown7)).toEqual([]);
     expect(leadGreedy([], halfDown7)).toEqual([]);
     expect(pathCost([])).toBe(0);
+  });
+});
+
+/** Drop-2 grips for each chord, all on one run of four adjacent strings. */
+function drop2OnAdjacentStrings(chords: Chord[]): Voicing[] {
+  const width = 4;
+  for (let start = 0; start + width <= standard7.length; start++) {
+    const groups = chords.map((chord) => {
+      const found: VoicedNote[][] = [];
+      for (let inversion = 0; inversion < width; inversion++) {
+        found.push(...findVoicings(standard7, 12, chord, 'drop2', inversion, start, width));
+      }
+      return found;
+    });
+    if (groups.some((grips) => grips.length === 0)) continue;
+    return groups.map((grips) => toVoicing(grips[0]));
+  }
+  throw new Error('no drop-2 voicing on four adjacent strings');
+}
+
+describe('findVoicings pipeline', () => {
+  it('returns a finite transition cost for drop-2 Dm7–G7–Cmaj7', () => {
+    const chords = twoFiveOne();
+    expect(chords.map((chord) => [chord.rootPc, chord.symbol])).toEqual([
+      [2, 'm7'],
+      [7, '7'],
+      [0, 'maj7'],
+    ]);
+
+    const voicings = drop2OnAdjacentStrings(chords);
+    expect(voicings).toHaveLength(3);
+    for (let i = 0; i < chords.length; i++) {
+      const roleByPc = new Map(
+        chords[i].tones.map((tone) => [mod(chords[i].rootPc + tone.interval, 12), tone.role]),
+      );
+      expect(voicings[i].notes).toHaveLength(4);
+      for (const note of voicings[i].notes) {
+        expect(note.role).toBe(roleByPc.get(note.pc));
+      }
+    }
+
+    expect(Number.isFinite(transitionCost(voicings[0], voicings[1]))).toBe(true);
+    expect(Number.isFinite(transitionCost(voicings[1], voicings[2]))).toBe(true);
   });
 });
 
