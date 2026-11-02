@@ -5,8 +5,8 @@
 
 import { mod } from './notes';
 
-const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-const NATURAL = [0, 2, 4, 5, 7, 9, 11];
+export const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+export const NATURAL = [0, 2, 4, 5, 7, 9, 11];
 
 // Preferred major-tonic spelling of each pitch class. Sharps and flats follow
 // the shorter key signature (F# and Gb are a tie; F# is the usual major name).
@@ -27,7 +27,8 @@ export function accidentalGlyph(diff: number): string {
   return 'b'.repeat(-diff);
 }
 
-function nearestAccidental(target: number, natural: number): number {
+/** Accidental that places `natural` on `target`, in -6..6. Negative is flat. */
+export function nearestAccidental(target: number, natural: number): number {
   let diff = mod(target, 12) - natural;
   if (diff > 6) diff -= 12;
   if (diff < -6) diff += 12;
