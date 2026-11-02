@@ -15,6 +15,7 @@ scales, modes, and diatonic triads, built for half-step-down tuning.
   plus a chord builder and progressions.
 - **One voicing:** in Chords view, step through a single playable grip on the neck and keyboard instead of lighting every chord tone.
 - **Voice-led playback and export:** with Voice leading on, Play and Export .mid walk a smooth path of grips instead of restacking every chord in root position.
+- **Adjustable voice-leading weights:** with Voice leading on, open Voice leading weights to tune each cost. Reset restores the defaults, and a change while playing applies on the next chord.
 - **Note names or scale-degree labels.**
 - **Concert vs Standard labeling:** Standard shifts displayed note names up a semitone so
   shapes read like standard tuning; the physical fret positions are unchanged.

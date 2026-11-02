@@ -8,7 +8,7 @@ import {
   chordSymbol,
   romanForChord,
 } from '../music/chords';
-import type { Chord, ChordQuality } from '../music/chords';
+import type { Chord, ChordQuality, ChordToneRole } from '../music/chords';
 import { PROGRESSION_TEMPLATES, generateProgression, getTemplate } from '../music/progression';
 import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { player } from '../audio/player';
@@ -16,6 +16,7 @@ import { synth } from '../audio/synth';
 import { mod, noteName } from '../music/notes';
 import type { GuitarString } from '../music/tunings';
 import { DEFAULT_WEIGHTS, leadProgression } from '../music/voiceLeading';
+import type { Weights } from '../music/voiceLeading';
 import type { Voicing } from '../music/voicings';
 
 interface Props {
@@ -77,6 +78,42 @@ const QUALITY_GROUPS = (() => {
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
+function cloneWeights(w: Weights): Weights {
+  return { ...w, roleMotion: { ...w.roleMotion } };
+}
+
+function snapToStep(value: number, step: number): number {
+  const places = step < 1 ? 1 : 0;
+  return Number((Math.round(value / step) * step).toFixed(places));
+}
+
+function formatWeight(value: number, step: number): string {
+  return step < 1 ? value.toFixed(1) : String(Math.round(value));
+}
+
+const ROLE_MOTION_FIELDS: { key: ChordToneRole; label: string }[] = [
+  { key: 'root', label: 'Root motion' },
+  { key: 'third', label: 'Third motion' },
+  { key: 'fifth', label: 'Fifth motion' },
+  { key: 'seventh', label: 'Seventh motion' },
+  { key: 'ext', label: 'Extension motion' },
+];
+
+const SCALAR_WEIGHT_FIELDS: {
+  key: Exclude<keyof Weights, 'roleMotion'>;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}[] = [
+  { key: 'handShift', label: 'Hand shift', min: 0, max: 5, step: 0.1 },
+  { key: 'commonToneBonus', label: 'Common-tone bonus', min: 0, max: 5, step: 0.1 },
+  { key: 'resolutionBonus', label: 'Resolution bonus', min: 0, max: 5, step: 0.1 },
+  { key: 'registerAnchor', label: 'Register anchor', min: 0, max: 5, step: 0.1 },
+  { key: 'omissionPenalty', label: 'Omission penalty', min: 0, max: 20, step: 0.5 },
+  { key: 'anchorFret', label: 'Anchor fret', min: 0, max: 15, step: 1 },
+];
+
 export function ProgressionControls(props: Props) {
   const {
     rootPc,
@@ -113,6 +150,7 @@ export function ProgressionControls(props: Props) {
   const [spicy, setSpicy] = useState(session.spicy);
   const [templateId, setTemplateId] = useState(session.templateId);
   const [voiceLeading, setVoiceLeading] = useState(true);
+  const [weights, setWeights] = useState<Weights>(() => cloneWeights(DEFAULT_WEIGHTS));
 
   const timerRef = useRef<number | null>(null);
   const onShowVoicingRef = useRef(onShowVoicing);
@@ -198,11 +236,11 @@ export function ProgressionControls(props: Props) {
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
   const lead = useMemo(() => {
     try {
-      return { path: leadProgression(progression, tuning, DEFAULT_WEIGHTS), error: null as string | null };
+      return { path: leadProgression(progression, tuning, weights), error: null as string | null };
     } catch (err) {
       return { path: null as Voicing[] | null, error: err instanceof Error ? err.message : String(err) };
     }
-  }, [progression, tuning]);
+  }, [progression, tuning, weights]);
   const leadRef = useRef(lead);
   leadRef.current = lead;
   const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
@@ -509,6 +547,50 @@ export function ProgressionControls(props: Props) {
           <input type="checkbox" checked={guideTones} onChange={(e) => onGuideTones(e.target.checked)} /> Guide tones
         </label>
       </div>
+      {voiceLeading && (
+        <details className="vl-weights">
+          <summary>Voice leading weights</summary>
+          <div className="vl-weights-body">
+            {ROLE_MOTION_FIELDS.map((field) => (
+              <label key={field.key} className="vl-weight">
+                <span>{field.label}</span>
+                <span className="vl-weight-value">{formatWeight(weights.roleMotion[field.key], 0.1)}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={weights.roleMotion[field.key]}
+                  onChange={(e) => {
+                    const value = snapToStep(Number(e.target.value), 0.1);
+                    setWeights((w) => ({ ...w, roleMotion: { ...w.roleMotion, [field.key]: value } }));
+                  }}
+                />
+              </label>
+            ))}
+            {SCALAR_WEIGHT_FIELDS.map((field) => (
+              <label key={field.key} className="vl-weight">
+                <span>{field.label}</span>
+                <span className="vl-weight-value">{formatWeight(weights[field.key], field.step)}</span>
+                <input
+                  type="range"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={weights[field.key]}
+                  onChange={(e) => {
+                    const value = snapToStep(Number(e.target.value), field.step);
+                    setWeights((w) => ({ ...w, [field.key]: value }));
+                  }}
+                />
+              </label>
+            ))}
+            <button type="button" className="btn-mini vl-weights-reset" onClick={() => setWeights(cloneWeights(DEFAULT_WEIGHTS))}>
+              Reset
+            </button>
+          </div>
+        </details>
+      )}
       {voiceLeading && lead.error && <p className="prog-error">{lead.error}</p>}
     </div>
   );
