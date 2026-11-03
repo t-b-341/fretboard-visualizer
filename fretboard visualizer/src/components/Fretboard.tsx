@@ -1,0 +1,445 @@
+import { useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import type { Cell } from '../music/fretboard';
+import type { GuitarString } from '../music/tunings';
+import type { Chord } from '../music/chords';
+import type { ViewMode } from '../music/types';
+import { mod, noteName } from '../music/notes';
+import { noteFillClass, noteTextClass } from '../music/highlight';
+import { guideTonePcs, placeGuideVoices } from '../music/guide';
+import type { GuidePoint } from '../music/guide';
+import type { HighlightEvaluator } from '../state/derive';
+
+interface CellRef {
+  stringIndex: number;
+  fret: number;
+}
+
+export interface PracticeMark {
+  fill: string;
+  label: string;
+  ring?: boolean;
+}
+
+/** Note-quiz overlay. While set, scale and chord highlights stay hidden. */
+export interface PracticeOverlay {
+  marks: Record<string, PracticeMark>;
+  heatmap: boolean;
+  listen: boolean;
+  onCell: (stringIndex: number, fret: number, pc: number, midi: number) => void;
+}
+
+interface Props {
+  grid: Cell[][];
+  tuning: GuitarString[];
+  fretCount: number;
+  fretFrom: number;
+  fretTo: number;
+  hiddenStrings: number[];
+  leftHanded: boolean;
+  /** Cells to keep when a position box or voicing is active. Null shows every lit note. */
+  onlyCells: CellRef[] | null;
+  guideTones: boolean;
+  viewMode: ViewMode;
+  activeChord: Chord | null;
+  shift: number;
+  compareEnabled: boolean;
+  colorByDegree: boolean;
+  clickToHear: boolean;
+  onPlay: (midi: number) => void;
+  caption?: string | null;
+  /** Pitch classes of this chord's guide tones, when that overlay is on. */
+  guidePcs?: Set<number> | null;
+  /** Pitch-class highlight. Quiz and identify pass per-cell options. */
+  evaluate: HighlightEvaluator;
+  /** Inclusive frets drawn at full strength. Notes outside stay visible, dimmed. */
+  window?: { min: number; max: number };
+  /**
+   * When set, only these "stringIndex:fret" cells draw as chord tones.
+   * Every other cell is a ghost scale tone, or nothing.
+   */
+  activeCells?: Set<string>;
+  /** Identify view: pick or clear the note at this string and fret. */
+  onPick?: (stringIndex: number, fret: number) => void;
+  /** Quiz view: answer the tone at this string and fret. */
+  onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
+  /** While interval reference is armed, a click sets or clears that pitch class. */
+  onReference?: (pc: number) => void;
+  /** Note quiz. Replaces ordinary highlighting for as long as it is set. */
+  practice?: PracticeOverlay | null;
+  /** MIDI notes held from an input, drawn at every position with that exact number. */
+  showPlayed?: boolean;
+  playedMidis?: ReadonlySet<number>;
+  /** Shown above the neck. Used for the tab of a single grip. */
+  children?: ReactNode;
+}
+
+const NO_PLAYED: ReadonlySet<number> = new Set();
+
+function PlayedMark({ x, y, on }: { x: number; y: number; on: boolean }) {
+  if (!on) return null;
+  return (
+    <g className="played-mark">
+      <circle className="note-played-edge" cx={x} cy={y} r={R + 4} />
+      <circle className="note-played" cx={x} cy={y} r={R + 4} />
+    </g>
+  );
+}
+
+const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
+const INLAY_DOUBLE = [12, 24];
+
+const ROW_H = 36;
+const FRET_W = 56;
+const PAD_TOP = 28;
+const PAD_BOTTOM = 44;
+const LEFT_LABEL_X = 16;
+const OPEN_X = 56;
+const NUT_X = 92;
+const RIGHT_PAD = 24;
+const R = 13;
+
+export function Fretboard(props: Props) {
+  const {
+    grid,
+    tuning,
+    fretFrom,
+    fretTo,
+    hiddenStrings,
+    leftHanded,
+    onlyCells,
+    guideTones,
+    viewMode,
+    activeChord,
+    shift,
+    compareEnabled,
+    colorByDegree,
+    clickToHear,
+    onPlay,
+    caption,
+    guidePcs,
+    activeCells,
+    onPick,
+    onQuizAnswer,
+    onReference,
+    evaluate,
+    window: positionWindow,
+    practice,
+    showPlayed = false,
+    playedMidis = NO_PLAYED,
+    children,
+  } = props;
+
+  const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
+  const visible = tuning.map((_, i) => i).filter((i) => !hidden.has(i));
+  const from = Math.max(0, Math.min(fretFrom, fretTo));
+  const to = Math.max(from, fretTo);
+  const showOpen = from === 0;
+  const spaces = showOpen ? to : to - from + 1;
+
+  const numVisible = Math.max(1, visible.length);
+  const width = NUT_X + Math.max(spaces, 0) * FRET_W + RIGHT_PAD;
+  const height = PAD_TOP + (numVisible - 1) * ROW_H + PAD_BOTTOM;
+
+  const stringY = (si: number) => {
+    const rank = visible.indexOf(si);
+    if (rank < 0) return PAD_TOP;
+    return PAD_TOP + (numVisible - 1 - rank) * ROW_H;
+  };
+  const topY = stringY(visible[visible.length - 1] ?? 0);
+  const botY = stringY(visible[0] ?? 0);
+  const midY = (topY + botY) / 2;
+
+  const boardLeft = NUT_X;
+  const noteX = (fret: number) => {
+    if (fret === 0) return OPEN_X;
+    const spaceIndex = fret - (showOpen ? 1 : from);
+    return boardLeft + (spaceIndex + 0.5) * FRET_W;
+  };
+  const fretLineX = (wire: number) => {
+    const leftWire = showOpen ? 0 : from - 1;
+    return boardLeft + (wire - leftWire) * FRET_W;
+  };
+
+  // Mirror x so the nut sits on the right. Text is drawn unflipped at the new x.
+  const X = (x: number) => (leftHanded ? width - x : x);
+  const rectX = (x: number, w: number) => (leftHanded ? width - x - w : x);
+
+  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled && !practice;
+  const guideActive = !practice && guideTones && viewMode === 'chord' && !!activeChord;
+  const chordId = activeChord
+    ? `${activeChord.rootPc}:${activeChord.symbol}:${activeChord.tones.map((t) => t.interval).join(',')}`
+    : '';
+
+  const prevPoints = useRef<GuidePoint[] | null>(null);
+  const prevChordId = useRef('');
+
+  const onlyKeys = useMemo(() => {
+    if (!onlyCells) return null;
+    return new Set(onlyCells.map((c) => `${c.stringIndex}:${c.fret}`));
+  }, [onlyCells]);
+
+  const guideVoices = useMemo(() => {
+    if (!guideActive || !activeChord) return [];
+    const pcs = guideTonePcs(activeChord);
+    const candidates: GuidePoint[] = [];
+    for (const row of grid) {
+      for (const cell of row) {
+        if (hidden.has(cell.stringIndex)) continue;
+        if (cell.fret < from || cell.fret > to) continue;
+        if (onlyKeys && !onlyKeys.has(`${cell.stringIndex}:${cell.fret}`)) continue;
+        if (!pcs.includes(cell.pc)) continue;
+        candidates.push({ stringIndex: cell.stringIndex, fret: cell.fret, pc: cell.pc });
+      }
+    }
+    const link = prevChordId.current !== '' && prevChordId.current !== chordId;
+    return placeGuideVoices(candidates, pcs, link ? prevPoints.current : null, Math.round((from + to) / 2));
+    // prevPoints is read on purpose: it holds the previous chord's spots, written after paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideActive, chordId, grid, from, to, hiddenStrings, activeChord, onlyCells]);
+
+  useEffect(() => {
+    prevChordId.current = chordId;
+    prevPoints.current = guideVoices.map((v) => v.point);
+  }, [guideVoices, chordId]);
+
+  const allow = practice ? null : onlyKeys;
+
+  const wires: number[] = [];
+  if (showOpen) {
+    for (let w = 0; w <= to; w++) wires.push(w);
+  } else {
+    for (let w = from - 1; w <= to; w++) wires.push(w);
+  }
+  const fretNums: number[] = [];
+  for (let f = from; f <= to; f++) fretNums.push(f);
+
+  const play = (midi: number) => {
+    if (clickToHear) onPlay(midi);
+  };
+
+  const picking = !practice && viewMode === 'identify' && !!onPick;
+  const quizzing = !practice && viewMode === 'quiz' && !!onQuizAnswer;
+
+  const activate = (stringIndex: number, fret: number, midi: number) => {
+    if (picking) onPick(stringIndex, fret);
+    onReference?.(mod(midi, 12));
+    play(midi);
+  };
+
+  const answerQuiz = (stringIndex: number, fret: number, pc: number, midi: number) => {
+    if (positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max)) return;
+    onQuizAnswer?.(stringIndex, fret, pc);
+    onReference?.(mod(midi, 12));
+    play(midi);
+  };
+
+  const noteClass = (fret: number) => {
+    const outside =
+      positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
+    return [clickToHear || picking || quizzing || onReference ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
+  };
+
+  return (
+    <div className="fretboard-wrap">
+      {caption && <div className="board-caption">{caption}</div>}
+      {children}
+      {visible.length === 0 ? (
+        <p className="board-caption">Show at least one string.</p>
+      ) : (
+        <svg
+          className="fretboard"
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          role="group"
+          aria-label="Fretboard diagram"
+        >
+          <rect
+            className="board"
+            x={rectX(NUT_X, Math.max(spaces, 0) * FRET_W)}
+            y={topY - 14}
+            width={Math.max(spaces, 0) * FRET_W}
+            height={(numVisible - 1) * ROW_H + 28}
+            rx={5}
+          />
+
+          {INLAY_SINGLE.filter((f) => f >= from && f <= to && f > 0).map((f) => (
+            <circle key={`i-${f}`} className="inlay" cx={X(noteX(f))} cy={midY} r={5} />
+          ))}
+          {INLAY_DOUBLE.filter((f) => f >= from && f <= to).map((f) =>
+            numVisible < 3 ? (
+              <circle key={`i2-${f}`} className="inlay" cx={X(noteX(f))} cy={midY} r={5} />
+            ) : (
+              <g key={`i2-${f}`}>
+                <circle className="inlay" cx={X(noteX(f))} cy={midY - ROW_H} r={5} />
+                <circle className="inlay" cx={X(noteX(f))} cy={midY + ROW_H} r={5} />
+              </g>
+            ),
+          )}
+
+          {wires.map((w) => (
+            <line
+              key={`f-${w}`}
+              className={w === 0 ? 'nut' : 'fret'}
+              x1={X(fretLineX(w))}
+              y1={topY}
+              x2={X(fretLineX(w))}
+              y2={botY}
+            />
+          ))}
+
+          {visible.map((si) => (
+            <line
+              key={`s-${si}`}
+              className="string"
+              x1={X(NUT_X)}
+              y1={stringY(si)}
+              x2={X(fretLineX(showOpen ? to : to))}
+              y2={stringY(si)}
+              strokeWidth={1 + (tuning.length - 1 - si) * 0.25}
+            />
+          ))}
+
+          {visible.map((si) => (
+            <text
+              key={`t-${si}`}
+              className="tuning-label"
+              x={X(LEFT_LABEL_X)}
+              y={stringY(si)}
+              textAnchor={leftHanded ? 'end' : 'start'}
+              dominantBaseline="central"
+            >
+              {noteName(mod(tuning[si].pc + shift, 12))}
+            </text>
+          ))}
+
+          {fretNums.map((f) => (
+            <text key={`fn-${f}`} className="fret-number" x={X(noteX(f))} y={height - 16} textAnchor="middle">
+              {f}
+            </text>
+          ))}
+
+          {guideActive &&
+            guideVoices.map((voice, i) => {
+              if (!voice.from) return null;
+              if (hidden.has(voice.from.stringIndex) || hidden.has(voice.point.stringIndex)) return null;
+              if (voice.from.fret < from || voice.from.fret > to) return null;
+              if (voice.point.fret < from || voice.point.fret > to) return null;
+              return (
+                <line
+                  key={`g-${i}`}
+                  className="guide-line"
+                  x1={X(noteX(voice.from.fret))}
+                  y1={stringY(voice.from.stringIndex)}
+                  x2={X(noteX(voice.point.fret))}
+                  y2={stringY(voice.point.stringIndex)}
+                />
+              );
+            })}
+
+          {grid.map((row) =>
+            row.map((cell) => {
+              if (hidden.has(cell.stringIndex)) return null;
+              if (cell.fret < from || cell.fret > to) return null;
+              const cellKey = `${cell.stringIndex}:${cell.fret}`;
+              const played = showPlayed && playedMidis.has(cell.midi);
+              if (allow && !allow.has(cellKey) && !played) return null;
+              if (practice) {
+                const mark = practice.marks[cellKey];
+                if (!mark && !practice.heatmap && !practice.listen && !played) return null;
+                const x = X(noteX(cell.fret));
+                const y = stringY(cell.stringIndex);
+                const label = mark?.label ?? '';
+                const click = () => practice.onCell(cell.stringIndex, cell.fret, cell.pc, cell.midi);
+                return (
+                  <g
+                    key={`n-${cell.stringIndex}-${cell.fret}`}
+                    className={practice.listen ? 'note-hit' : undefined}
+                    onClick={practice.listen ? click : undefined}
+                  >
+                    {mark || practice.heatmap ? (
+                      <circle className="note" fill={mark?.fill ?? '#3d4756'} cx={x} cy={y} r={R} />
+                    ) : (
+                      <circle className="note-target" cx={x} cy={y} r={R} />
+                    )}
+                    {mark?.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                    <PlayedMark x={x} y={y} on={played} />
+                    {label && (
+                      <text
+                        className={label.length > 2 ? 'practice-label practice-label-long' : 'practice-label'}
+                        x={x}
+                        y={y}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                      >
+                        {label}
+                      </text>
+                    )}
+                  </g>
+                );
+              }
+              const ev = quizzing
+                ? evaluate(cell.pc, { cellKey })
+                : activeCells
+                  ? evaluate(cell.pc, { placed: activeCells.has(cellKey), midi: cell.midi })
+                  : evaluate(cell.pc);
+              const x = X(noteX(cell.fret));
+              const y = stringY(cell.stringIndex);
+              const key = `n-${cell.stringIndex}-${cell.fret}`;
+              const onCellClick = () =>
+                quizzing
+                  ? answerQuiz(cell.stringIndex, cell.fret, cell.pc, cell.midi)
+                  : activate(cell.stringIndex, cell.fret, cell.midi);
+              if (!ev) {
+                if (!picking && !quizzing && !played) return null;
+                return (
+                  <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
+                    {(picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
+                  </g>
+                );
+              }
+              if (ev.role === 'ghost') {
+                return (
+                  <g
+                    key={key}
+                    className={noteClass(cell.fret)}
+                    onClick={() => {
+                      onReference?.(mod(cell.midi, 12));
+                      play(cell.midi);
+                    }}
+                  >
+                    <circle className="note-ghost" cx={x} cy={y} r={4.5} />
+                    {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={9} />}
+                    {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
+                  </g>
+                );
+              }
+              return (
+                <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
+                  <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
+                  {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                  {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={R + 6} />}
+                  {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
+                  {ev.outside && <circle className="note-outside-ring" cx={x} cy={y} r={R + 3} />}
+                  <PlayedMark x={x} y={y} on={played} />
+                  <text
+                    className={noteTextClass(ev, degreeColors)}
+                    x={x}
+                    y={y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {ev.label}
+                  </text>
+                </g>
+              );
+            }),
+          )}
+        </svg>
+      )}
+    </div>
+  );
+}
