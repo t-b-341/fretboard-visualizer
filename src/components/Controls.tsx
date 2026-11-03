@@ -39,7 +39,6 @@ function writeTextFallback(text: string) {
 
 interface Props {
   state: AppState;
-  family: FamilyDef;
   mode: ModeDef;
   compareFamily: FamilyDef;
   compareMode: ModeDef;
@@ -48,7 +47,6 @@ interface Props {
   onNumStrings: (n: 6 | 7 | 8) => void;
   onPreset: (id: string) => void;
   onStringEdit: (stringIndex: number, pc: number) => void;
-  onFamily: (familyKey: FamilyKey) => void;
   onToggleCompare: (enabled: boolean) => void;
   onCompareFamily: (familyKey: FamilyKey) => void;
   onComparePreset: (kind: 'parallel' | 'relative') => void;
@@ -71,7 +69,6 @@ interface Props {
 export function Controls(props: Props) {
   const {
     state,
-    family,
     mode,
     compareFamily,
     compareMode,
@@ -80,7 +77,6 @@ export function Controls(props: Props) {
     onNumStrings,
     onPreset,
     onStringEdit,
-    onFamily,
     onToggleCompare,
     onCompareFamily,
     onComparePreset,
@@ -386,44 +382,6 @@ export function Controls(props: Props) {
             </select>
           </div>
         )}
-      </div>
-
-      {/* Key & scale */}
-      <div className="control-group">
-        <span className="group-label">Key &amp; Scale</span>
-        <div className="field">
-          <label>Root</label>
-          <select
-            value={state.rootPc}
-            onChange={(e) => onUpdate({ rootPc: Number(e.target.value) })}
-          >
-            {noteOptions.map((o) => (
-              <option key={o.concertPc} value={o.concertPc}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Scale family</label>
-          <select value={family.key} onChange={(e) => onFamily(e.target.value as FamilyKey)}>
-            {SCALE_FAMILIES.map((f) => (
-              <option key={f.key} value={f.key}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Mode</label>
-          <select value={mode.key} onChange={(e) => onUpdate({ modeKey: e.target.value })}>
-            {family.modes.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Compare / overlay */}

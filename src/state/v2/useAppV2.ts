@@ -3,18 +3,24 @@
 // short pause so a reload opens where you left off.
 
 import { useCallback, useEffect, useReducer } from 'react';
+import { mod } from '../../music/notes';
 import type { NoteQuizSettings } from '../../music/quiz';
-import { saveLast, startState } from './storage';
+import { captureMyDefault } from './myDefault';
+import { resetState, saveLast, startState } from './storage';
 import { readUrl } from './url';
-import type { AppStateV2, MaterialType } from './types';
+import type { AppStateV2, KeySelection, MaterialType, StartIn } from './types';
 
 export type AppAction =
   | { type: 'setMaterialType'; material: MaterialType }
+  | { type: 'setKey'; key: KeySelection }
   | { type: 'setView'; view: Partial<AppStateV2['view']> }
   | { type: 'setCurrentStep'; index: number }
   | { type: 'prevStep' }
   | { type: 'nextStep' }
-  | { type: 'setNoteQuiz'; settings: NoteQuizSettings };
+  | { type: 'setNoteQuiz'; settings: NoteQuizSettings }
+  | { type: 'setStartIn'; startIn: StartIn }
+  | { type: 'setMyDefault' }
+  | { type: 'reset' };
 
 const VIEW_KEYS = [
   'staff',
@@ -74,6 +80,18 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
     case 'setMaterialType':
       if (state.material.type === action.material) return state;
       return { ...state, material: { ...state.material, type: action.material } };
+    case 'setKey': {
+      const key = {
+        rootPc: mod(action.key.rootPc, 12),
+        familyKey: action.key.familyKey,
+        modeKey: action.key.modeKey,
+      };
+      const current = state.material.key;
+      if (current.rootPc === key.rootPc && current.familyKey === key.familyKey && current.modeKey === key.modeKey) {
+        return state;
+      }
+      return { ...state, material: { ...state.material, key } };
+    }
     case 'setView': {
       const view = { ...state.view, ...action.view };
       if (VIEW_KEYS.every((key) => view[key] === state.view[key])) return state;
@@ -87,6 +105,27 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       return moveStep(state, state.material.currentStep + 1);
     case 'setNoteQuiz':
       return applyNoteQuiz(state, action.settings);
+    case 'setStartIn':
+      if (state.settings.startIn === action.startIn) return state;
+      return { ...state, settings: { ...state.settings, startIn: action.startIn } };
+    case 'setMyDefault': {
+      const myDefault = captureMyDefault(state);
+      const prev = state.settings.myDefault;
+      if (
+        prev &&
+        prev.rootPc === myDefault.rootPc &&
+        prev.familyKey === myDefault.familyKey &&
+        prev.modeKey === myDefault.modeKey &&
+        prev.names === myDefault.names &&
+        prev.numStrings === myDefault.numStrings &&
+        prev.tuningPresetId === myDefault.tuningPresetId
+      ) {
+        return state;
+      }
+      return { ...state, settings: { ...state.settings, myDefault } };
+    }
+    case 'reset':
+      return resetState(state);
     default:
       return state;
   }
@@ -118,6 +157,9 @@ export function useAppV2() {
   const setMaterialType = useCallback((material: MaterialType) => {
     dispatch({ type: 'setMaterialType', material });
   }, []);
+  const setKey = useCallback((key: KeySelection) => {
+    dispatch({ type: 'setKey', key });
+  }, []);
   const setView = useCallback((view: Partial<AppStateV2['view']>) => {
     dispatch({ type: 'setView', view });
   }, []);
@@ -129,15 +171,24 @@ export function useAppV2() {
   const setNoteQuiz = useCallback((settings: NoteQuizSettings) => {
     dispatch({ type: 'setNoteQuiz', settings });
   }, []);
+  const setStartIn = useCallback((startIn: StartIn) => {
+    dispatch({ type: 'setStartIn', startIn });
+  }, []);
+  const setMyDefault = useCallback(() => dispatch({ type: 'setMyDefault' }), []);
+  const reset = useCallback(() => dispatch({ type: 'reset' }), []);
 
   return {
     state,
     dispatch,
     setMaterialType,
+    setKey,
     setView,
     setCurrentStep,
     prevStep,
     nextStep,
     setNoteQuiz,
+    setStartIn,
+    setMyDefault,
+    reset,
   };
 }

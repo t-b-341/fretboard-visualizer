@@ -1,8 +1,37 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { formatMyDefault } from '../../state/v2/myDefault';
+import type { MyDefault, StartIn } from '../../state/v2/types';
 
-const SECTIONS = ['Start in', 'Instrument', 'Neck', 'Keyboard', 'Sound', 'MIDI', 'Voice leading (advanced)'] as const;
+const SECTIONS = ['Instrument', 'Neck', 'Keyboard', 'Sound', 'MIDI', 'Voice leading (advanced)'] as const;
 
-export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function MyDefaultBlock({ mine, onSetFromCurrent }: { mine: MyDefault | null; onSetFromCurrent: () => void }) {
+  const saved = mine ? formatMyDefault(mine) : null;
+  return (
+    <div className="default-block">
+      <p className="default-summary">{saved ? saved.summary : 'Not set yet.'}</p>
+      {saved?.soundsAs && <p className="sounds-as">{saved.soundsAs}</p>}
+      <button type="button" onClick={onSetFromCurrent}>
+        Set from current
+      </button>
+    </div>
+  );
+}
+
+export function SettingsDrawer({
+  open,
+  onClose,
+  startIn,
+  myDefault,
+  onStartIn,
+  onSetFromCurrent,
+}: {
+  open: boolean;
+  onClose: () => void;
+  startIn: StartIn;
+  myDefault: MyDefault | null;
+  onStartIn: (startIn: StartIn) => void;
+  onSetFromCurrent: () => void;
+}) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
@@ -41,6 +70,30 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
             Close
           </button>
         </div>
+        <section>
+          <h3>Start in</h3>
+          <div className="start-options" role="radiogroup" aria-label="Start in">
+            <label>
+              <input
+                type="radio"
+                name="start-in"
+                checked={startIn === 'last'}
+                onChange={() => onStartIn('last')}
+              />
+              Last session
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="start-in"
+                checked={startIn === 'default'}
+                onChange={() => onStartIn('default')}
+              />
+              My default
+            </label>
+          </div>
+          {startIn === 'default' && <MyDefaultBlock mine={myDefault} onSetFromCurrent={onSetFromCurrent} />}
+        </section>
         {SECTIONS.map((name) => (
           <section key={name}>
             <h3>{name}</h3>

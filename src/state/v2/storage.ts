@@ -250,6 +250,21 @@ function applyMyDefault(mine: MyDefault): AppStateV2 {
 }
 
 /**
+ * Where Reset and New land. My default, when one is saved; otherwise the
+ * factory setup. The Start in choice itself is left as it was.
+ */
+export function resetState(current: AppStateV2): AppStateV2 {
+  if (!current.settings.myDefault) {
+    const fresh = createDefaultV2();
+    if (fresh.settings.startIn === current.settings.startIn) return fresh;
+    return { ...fresh, settings: { ...fresh.settings, startIn: current.settings.startIn } };
+  }
+  const next = applyMyDefault(current.settings.myDefault);
+  if (next.settings.startIn === current.settings.startIn) return next;
+  return { ...next, settings: { ...next.settings, startIn: current.settings.startIn } };
+}
+
+/**
  * Boot state. My default wins only when the saved session asked for it and
  * one is set. Otherwise the last session, and if there is none, the defaults.
  */

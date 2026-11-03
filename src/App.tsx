@@ -49,7 +49,8 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setView, setCurrentStep, prevStep, nextStep, setNoteQuiz } = useAppV2();
+  const { state, setMaterialType, setKey, setView, setCurrentStep, prevStep, nextStep, setNoteQuiz, setStartIn, setMyDefault } =
+    useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
@@ -162,7 +163,15 @@ export default function App() {
 
       {tab === 'workspace' ? (
         <div className="workspace">
-          <MaterialPanel type={state.material.type} onType={setMaterialType} />
+          <MaterialPanel
+            type={state.material.type}
+            onType={setMaterialType}
+            selection={state.material.key}
+            names={state.view.names}
+            steps={state.material.steps}
+            heldMidis={held}
+            onKey={setKey}
+          />
           <div className="workspace-main">
             <StepsStrip
               steps={state.material.steps}
@@ -265,7 +274,6 @@ export default function App() {
               <summary>Legacy controls (temporary)</summary>
               <Controls
                 state={legacy}
-                family={derived.family}
                 mode={derived.mode}
                 compareFamily={derived.compareFamily}
                 compareMode={derived.compareMode}
@@ -274,7 +282,6 @@ export default function App() {
                 onNumStrings={noop}
                 onPreset={noop}
                 onStringEdit={noop}
-                onFamily={noop}
                 onToggleCompare={noop}
                 onCompareFamily={noop}
                 onComparePreset={noop}
@@ -367,7 +374,14 @@ export default function App() {
         </PracticeTab>
       )}
 
-      <SettingsDrawer open={drawerOpen} onClose={closeDrawer} />
+      <SettingsDrawer
+        open={drawerOpen}
+        onClose={closeDrawer}
+        startIn={state.settings.startIn}
+        myDefault={state.settings.myDefault}
+        onStartIn={setStartIn}
+        onSetFromCurrent={setMyDefault}
+      />
     </div>
   );
 }

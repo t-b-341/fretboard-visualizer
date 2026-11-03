@@ -101,6 +101,35 @@ describe('reduceApp', () => {
     expect(next.practice.questionTypes.nameNote).toBe(false);
     expect(next.practice.spelling).toBe('key');
   });
+
+  it('sets the key, the start-in choice, and my default from the current setup', () => {
+    const state = createDefaultV2();
+    const keyed = reduceApp(state, { type: 'setKey', key: { rootPc: 4, familyKey: 'major', modeKey: 'Aeolian' } });
+    expect(keyed.material.key).toEqual({ rootPc: 4, familyKey: 'major', modeKey: 'Aeolian' });
+    expect(keyed.material.steps).toBe(state.material.steps);
+    expect(reduceApp(keyed, { type: 'setKey', key: keyed.material.key })).toBe(keyed);
+
+    const named = reduceApp(keyed, { type: 'setView', view: { names: 'standard' } });
+    const saved = reduceApp(named, { type: 'setMyDefault' });
+    expect(saved.settings.myDefault).toEqual({
+      rootPc: 4,
+      familyKey: 'major',
+      modeKey: 'Aeolian',
+      names: 'standard',
+      numStrings: 7,
+      tuningPresetId: '7-half-down',
+    });
+    expect(named.settings.myDefault).toBeNull();
+    expect(reduceApp(saved, { type: 'setMyDefault' })).toBe(saved);
+
+    const chosen = reduceApp(saved, { type: 'setStartIn', startIn: 'default' });
+    expect(chosen.settings.startIn).toBe('default');
+    const changed = reduceApp(chosen, { type: 'setKey', key: { rootPc: 0, familyKey: 'major', modeKey: 'Ionian' } });
+    const reset = reduceApp(changed, { type: 'reset' });
+    expect(reset.material.key).toEqual({ rootPc: 4, familyKey: 'major', modeKey: 'Aeolian' });
+    expect(reset.view.names).toBe('standard');
+    expect(reset.settings.startIn).toBe('default');
+  });
 });
 
 describe('scheduleLastSave', () => {

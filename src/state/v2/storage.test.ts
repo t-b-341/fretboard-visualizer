@@ -9,10 +9,12 @@ import {
   loadLast,
   loadNamed,
   removeNamed,
+  resetState,
   saveLast,
   saveNamed,
   startState,
 } from './storage';
+import { formatMyDefault } from './myDefault';
 
 function installMemory() {
   const memory = new Map<string, string>();
@@ -185,5 +187,64 @@ describe('startState', () => {
     preferenceOnly.material.key.rootPc = 3;
     saveLast(preferenceOnly);
     expect(startState().material.key.rootPc).toBe(3);
+  });
+
+  it('resets to my default when one is set, and to the factory setup otherwise', () => {
+    const session = createDefaultV2();
+    session.material.key.rootPc = 2;
+    session.transport.tempo = 180;
+    session.settings.startIn = 'last';
+    session.settings.myDefault = {
+      rootPc: 3,
+      familyKey: 'major',
+      modeKey: 'Aeolian',
+      names: 'standard',
+      numStrings: 7,
+      tuningPresetId: '7-half-down',
+    };
+    const reset = resetState(session);
+    const preset = getPreset('7-half-down')!;
+    expect(reset.material.key).toEqual({ rootPc: 3, familyKey: 'major', modeKey: 'Aeolian' });
+    expect(reset.view.names).toBe('standard');
+    expect(reset.settings.startIn).toBe('last');
+    expect(reset.settings.myDefault?.rootPc).toBe(3);
+    expect(reset.transport.tempo).toBe(createDefaultV2().transport.tempo);
+    expect(reset.settings.instrument.tuning).toEqual(preset.notes);
+
+    const plain = createDefaultV2();
+    plain.material.key.rootPc = 2;
+    plain.settings.startIn = 'last';
+    const fresh = resetState(plain);
+    expect(fresh.material.key.rootPc).toBe(createDefaultV2().material.key.rootPc);
+    expect(fresh.settings.startIn).toBe('last');
+    expect(fresh.settings.myDefault).toBeNull();
+  });
+});
+
+describe('formatMyDefault', () => {
+  it('names the saved key, and the sounding pitch when names are Standard', () => {
+    expect(
+      formatMyDefault({
+        rootPc: 3,
+        familyKey: 'major',
+        modeKey: 'Aeolian',
+        names: 'standard',
+        numStrings: 7,
+        tuningPresetId: '7-half-down',
+      }),
+    ).toEqual({
+      summary: 'E minor (Aeolian), Standard names, 7-string half step down',
+      soundsAs: 'Sounds as Eb minor',
+    });
+    expect(
+      formatMyDefault({
+        rootPc: 4,
+        familyKey: 'major',
+        modeKey: 'Aeolian',
+        names: 'concert',
+        numStrings: 7,
+        tuningPresetId: '7-half-down',
+      }).soundsAs,
+    ).toBeNull();
   });
 });

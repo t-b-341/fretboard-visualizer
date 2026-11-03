@@ -1,4 +1,5 @@
-import type { MaterialType } from '../../state/v2/types';
+import type { MaterialType, NameStyle, KeySelection, Step } from '../../state/v2/types';
+import { KeyPanel } from './KeyPanel';
 
 const NOTES: Record<MaterialType, string> = {
   scale: 'One scale, on the staff, the neck, and the keyboard.',
@@ -12,7 +13,23 @@ const TYPES: readonly { id: MaterialType; label: string }[] = [
   { id: 'progression', label: 'Progression' },
 ];
 
-export function MaterialPanel({ type, onType }: { type: MaterialType; onType: (type: MaterialType) => void }) {
+export function MaterialPanel({
+  type,
+  onType,
+  selection,
+  names,
+  steps,
+  heldMidis,
+  onKey,
+}: {
+  type: MaterialType;
+  onType: (type: MaterialType) => void;
+  selection: KeySelection;
+  names: NameStyle;
+  steps: Step[];
+  heldMidis: ReadonlySet<number>;
+  onKey: (key: KeySelection) => void;
+}) {
   return (
     <aside className="material-panel" data-testid="material-panel">
       <section data-testid="material-type">
@@ -36,10 +53,7 @@ export function MaterialPanel({ type, onType }: { type: MaterialType; onType: (t
         </p>
       </section>
 
-      <section data-testid="key-panel">
-        <h2>Key</h2>
-        <div data-testid="detect-key" className="panel-slot" />
-      </section>
+      <KeyPanel selection={selection} names={names} steps={steps} heldMidis={heldMidis} onKey={onKey} />
 
       <section data-testid="add-chord">
         <h2>Add chord</h2>
