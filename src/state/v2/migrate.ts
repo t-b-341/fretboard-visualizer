@@ -159,9 +159,15 @@ function readSteps(v: unknown): Step[] {
     seen.add(id);
     const source: StepSource =
       item.source === 'suggested' || item.source === 'identified' ? item.source : 'manual';
+    let bassPc: number | undefined;
+    if (typeof item.bassPc === 'number' && Number.isInteger(item.bassPc)) {
+      const bass = mod(item.bassPc, 12);
+      if (bass !== chord.rootPc) bassPc = bass;
+    }
     steps.push({
       id,
       chord,
+      ...(bassPc !== undefined ? { bassPc } : {}),
       locked: item.locked === true,
       voicingIndex: clampNum(item.voicingIndex, 0, 10000, 0),
       source,

@@ -49,7 +49,7 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setKey, setView, setCurrentStep, prevStep, nextStep, setNoteQuiz, setStartIn, setMyDefault } =
+  const { state, setMaterialType, setKey, setView, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault } =
     useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -171,6 +171,8 @@ export default function App() {
             steps={state.material.steps}
             heldMidis={held}
             onKey={setKey}
+            onAddChord={addChord}
+            onSuggest={suggest}
           />
           <div className="workspace-main">
             <StepsStrip
@@ -182,6 +184,9 @@ export default function App() {
               onPrev={prevStep}
               onNext={nextStep}
               onSelect={setCurrentStep}
+              onToggleLock={toggleLock}
+              onReroll={rerollStep}
+              onRemove={removeStep}
             />
             <ViewBar
               staff={state.view.staff}
@@ -305,8 +310,6 @@ export default function App() {
               />
               <ProgressionControls
                 rootPc={legacy.rootPc}
-                intervals={derived.intervals}
-                scalePcs={derived.scalePcs}
                 shift={derived.shift}
                 tuning={legacy.tuning}
                 fretCount={legacy.fretCount}
@@ -323,10 +326,7 @@ export default function App() {
                 onShowChord={noop}
                 onShowVoicing={setPlaybackVoicing}
                 onGhostScale={noop}
-                diatonicIntervals={derived.diatonic.intervals}
-                parentName={derived.diatonic.name}
                 guideTones={legacy.guideTones}
-                colorChordsByRoot={legacy.colorChordsByRoot}
                 onGuideTones={noop}
                 positionWindow={legacy.positionWindow}
                 session={session}
@@ -334,7 +334,6 @@ export default function App() {
                 onSessionChange={noop}
                 identifyOn={false}
                 onToggleIdentify={noop}
-                builderSeed={null}
               />
               <MidiControls
                 rootPc={legacy.rootPc}

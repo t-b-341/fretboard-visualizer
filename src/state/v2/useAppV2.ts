@@ -3,12 +3,16 @@
 // short pause so a reload opens where you left off.
 
 import { useCallback, useEffect, useReducer } from 'react';
+import type { Chord } from '../../music/chords';
+import { rerollChord } from '../../music/explain';
 import { mod } from '../../music/notes';
+import { mulberry32 } from '../../music/progression';
 import type { NoteQuizSettings } from '../../music/quiz';
 import { captureMyDefault } from './myDefault';
 import { resetState, saveLast, startState } from './storage';
+import { mergeSuggestion, modeIntervals, suggestChords, type SuggestStyle } from './suggest';
 import { readUrl } from './url';
-import type { AppStateV2, KeySelection, MaterialType, StartIn } from './types';
+import type { AppStateV2, KeySelection, MaterialType, StartIn, Step } from './types';
 
 export type AppAction =
   | { type: 'setMaterialType'; material: MaterialType }
@@ -17,6 +21,11 @@ export type AppAction =
   | { type: 'setCurrentStep'; index: number }
   | { type: 'prevStep' }
   | { type: 'nextStep' }
+  | { type: 'addChord'; chord: Chord; bassPc?: number; id: string }
+  | { type: 'removeStep'; index: number }
+  | { type: 'toggleLock'; index: number }
+  | { type: 'rerollStep'; index: number; seed: number }
+  | { type: 'suggest'; style: SuggestStyle; borrowed: boolean; seed: number; ids: string[] }
   | { type: 'setNoteQuiz'; settings: NoteQuizSettings }
   | { type: 'setStartIn'; startIn: StartIn }
   | { type: 'setMyDefault' }
@@ -32,6 +41,34 @@ const VIEW_KEYS = [
   'voiceMotion',
   'staffPitch',
 ] as const satisfies readonly (keyof AppStateV2['view'])[];
+
+function analysisKey(state: AppStateV2) {
+  return {
+    rootPc: state.material.key.rootPc,
+    intervals: modeIntervals(state.material.key.familyKey, state.material.key.modeKey),
+  };
+}
+
+function addChord(state: AppStateV2, chord: Chord, id: string, bassPc?: number): AppStateV2 {
+  const step: Step = { id, chord, locked: false, voicingIndex: 0, source: 'manual' };
+  if (bassPc !== undefined && mod(bassPc, 12) !== mod(chord.rootPc, 12)) step.bassPc = mod(bassPc, 12);
+  const steps = [...state.material.steps, step];
+  const type = steps.length >= 2 ? 'progression' : state.material.type === 'scale' ? 'chord' : state.material.type;
+  return {
+    ...state,
+    material: { ...state.material, type, steps, currentStep: steps.length - 1 },
+  };
+}
+
+function removeStep(state: AppStateV2, index: number): AppStateV2 {
+  if (!state.material.steps[index]) return state;
+  const steps = state.material.steps.filter((_, item) => item !== index);
+  let current = state.material.currentStep;
+  if (index < current) current -= 1;
+  if (steps.length === 0) current = 0;
+  else if (current >= steps.length) current = steps.length - 1;
+  return { ...state, material: { ...state.material, steps, currentStep: current } };
+}
 
 function moveStep(state: AppStateV2, index: number): AppStateV2 {
   const count = state.material.steps.length;
@@ -103,6 +140,47 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       return moveStep(state, state.material.currentStep - 1);
     case 'nextStep':
       return moveStep(state, state.material.currentStep + 1);
+    case 'addChord':
+      return addChord(state, action.chord, action.id, action.bassPc);
+    case 'removeStep':
+      return removeStep(state, action.index);
+    case 'toggleLock': {
+      const index = action.index;
+      if (!state.material.steps[index]) return state;
+      const steps = state.material.steps.map((step, item) =>
+        item === index ? { ...step, locked: !step.locked } : step,
+      );
+      return { ...state, material: { ...state.material, steps } };
+    }
+    case 'rerollStep': {
+      const index = action.index;
+      const step = state.material.steps[index];
+      if (!step) return state;
+      const key = analysisKey(state);
+      const chord = rerollChord(step.chord, state.material.steps, index, key, mulberry32(action.seed >>> 0));
+      if (chord.rootPc === step.chord.rootPc && chord.symbol === step.chord.symbol) return state;
+      const steps = state.material.steps.map((item, itemIndex) =>
+        itemIndex === index
+          ? { id: item.id, chord, locked: item.locked, voicingIndex: 0, source: 'suggested' as const }
+          : item,
+      );
+      return { ...state, material: { ...state.material, steps } };
+    }
+    case 'suggest': {
+      const key = analysisKey(state);
+      const count = state.material.steps.length;
+      const generated = suggestChords(
+        key,
+        action.style,
+        action.borrowed,
+        count === 0 ? null : count,
+        action.seed >>> 0,
+      );
+      const steps = mergeSuggestion(state.material.steps, generated, (index) => action.ids[index] ?? `step-${index + 1}`);
+      const type = steps.length >= 2 ? 'progression' : steps.length === 1 ? 'chord' : state.material.type;
+      const currentStep = steps.length === 0 ? 0 : Math.min(state.material.currentStep, steps.length - 1);
+      return { ...state, material: { ...state.material, type, steps, currentStep } };
+    }
     case 'setNoteQuiz':
       return applyNoteQuiz(state, action.settings);
     case 'setStartIn':
@@ -168,6 +246,23 @@ export function useAppV2() {
   }, []);
   const prevStep = useCallback(() => dispatch({ type: 'prevStep' }), []);
   const nextStep = useCallback(() => dispatch({ type: 'nextStep' }), []);
+  const addChordToSteps = useCallback((chord: Chord, bassPc?: number) => {
+    dispatch({ type: 'addChord', chord, bassPc, id: `step-${Math.random().toString(36).slice(2, 10)}` });
+  }, []);
+  const removeCurrent = useCallback((index: number) => dispatch({ type: 'removeStep', index }), []);
+  const toggleLock = useCallback((index: number) => dispatch({ type: 'toggleLock', index }), []);
+  const rerollCurrent = useCallback((index: number) => {
+    dispatch({ type: 'rerollStep', index, seed: Math.floor(Math.random() * 0x100000000) });
+  }, []);
+  const suggest = useCallback((style: SuggestStyle, borrowed: boolean) => {
+    dispatch({
+      type: 'suggest',
+      style,
+      borrowed,
+      seed: Math.floor(Math.random() * 0x100000000),
+      ids: Array.from({ length: 16 }, () => `step-${Math.random().toString(36).slice(2, 10)}`),
+    });
+  }, []);
   const setNoteQuiz = useCallback((settings: NoteQuizSettings) => {
     dispatch({ type: 'setNoteQuiz', settings });
   }, []);
@@ -186,6 +281,11 @@ export function useAppV2() {
     setCurrentStep,
     prevStep,
     nextStep,
+    addChord: addChordToSteps,
+    removeStep: removeCurrent,
+    toggleLock,
+    rerollStep: rerollCurrent,
+    suggest,
     setNoteQuiz,
     setStartIn,
     setMyDefault,

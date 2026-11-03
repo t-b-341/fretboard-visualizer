@@ -1,17 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ProgressionControls.css';
-import { chordColorTitle, classifyChord } from '../music/chordColor';
-import type { ChordClassification } from '../music/chordColor';
-import {
-  CHORD_QUALITIES,
-  buildChord,
-  buildDiatonicChord,
-  chordInKey,
-  chordSymbol,
-  romanForChord,
-} from '../music/chords';
-import type { Chord, ChordQuality, ChordToneRole } from '../music/chords';
-import { PROGRESSION_TEMPLATES, generateProgression, getTemplate } from '../music/progression';
+import type { Chord, ChordToneRole } from '../music/chords';
+import { chordSymbol } from '../music/chords';
 import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
@@ -27,10 +17,6 @@ import { TabExport } from './TabExport';
 interface Props {
   /** Key centre (concert pitch class). */
   rootPc: number;
-  /** Current scale intervals. */
-  intervals: number[];
-  /** Current scale pitch classes, for the in/out-of-key test. */
-  scalePcs: number[];
   /** Label shift (concert vs standard). */
   shift: number;
   /** Current guitar tuning. Voice leading places grips on these strings. */
@@ -53,15 +39,9 @@ interface Props {
   ghostScale: boolean;
   /** Show a chord on the instruments (also switches into chord view). */
   onShowChord: (chord: Chord | null) => void;
-  /** Grip to light during voice-led playback. Null returns the fretboard to the chord display. */
   onShowVoicing: (v: Voicing | null) => void;
   onGhostScale: (v: boolean) => void;
-  /** Heptatonic scale the diatonic buttons are built from (the parent, for pentatonic and similar). */
-  diatonicIntervals: number[];
-  parentName: string | null;
   guideTones: boolean;
-  /** Color chips and diatonic buttons from the root's degree in the parent scale. */
-  colorChordsByRoot: boolean;
   onGuideTones: (v: boolean) => void;
   /** When enabled, grips stay inside this inclusive fret range. */
   positionWindow: { enabled: boolean; min: number; max: number };
@@ -69,17 +49,8 @@ interface Props {
   session: ProgressionSnapshot;
   loadId: number;
   onSessionChange: (snap: ProgressionSnapshot) => void;
-  /** Identify mode, toggled from the chord builder row. */
   identifyOn: boolean;
   onToggleIdentify: () => void;
-  /** When set, the Root and Quality selects load this chord. */
-  builderSeed: BuilderSeed | null;
-}
-
-export interface BuilderSeed {
-  token: number;
-  rootPc: number;
-  quality: ChordQuality;
 }
 
 export interface ProgressionSnapshot {
@@ -92,20 +63,6 @@ export interface ProgressionSnapshot {
   spicy: boolean;
   templateId: string;
 }
-
-// Group the quality catalog into optgroups, preserving catalog order.
-const QUALITY_GROUPS = (() => {
-  const order: string[] = [];
-  const map = new Map<string, typeof CHORD_QUALITIES>();
-  for (const q of CHORD_QUALITIES) {
-    if (!map.has(q.group)) {
-      map.set(q.group, []);
-      order.push(q.group);
-    }
-    map.get(q.group)!.push(q);
-  }
-  return order.map((group) => ({ group, items: map.get(group)! }));
-})();
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
 
@@ -133,12 +90,6 @@ function firstStringSetGrip(
       grip.every((note) => note.fret >= opts.fretFrom && note.fret <= opts.fretTo),
     ) ?? []
   );
-}
-
-function chordPaintClass(base: string, painted: ChordClassification | null): string {
-  if (!painted) return base;
-  const degree = painted.degreeIndex === null ? '' : ` chord-deg-${painted.degreeIndex}`;
-  return `${base} chord-colored chord-${painted.status}${degree}`;
 }
 
 function cloneWeights(w: Weights): Weights {
@@ -180,8 +131,6 @@ const SCALAR_WEIGHT_FIELDS: {
 export function ProgressionControls(props: Props) {
   const {
     rootPc,
-    intervals,
-    scalePcs,
     shift,
     tuning,
     fretCount,
@@ -198,10 +147,7 @@ export function ProgressionControls(props: Props) {
     onShowChord,
     onShowVoicing,
     onGhostScale,
-    diatonicIntervals,
-    parentName,
     guideTones,
-    colorChordsByRoot,
     onGuideTones,
     positionWindow,
     session,
@@ -209,12 +155,9 @@ export function ProgressionControls(props: Props) {
     onSessionChange,
     identifyOn,
     onToggleIdentify,
-    builderSeed,
   } = props;
 
   const [, setTick] = useState(0);
-  const [builderRootPc, setBuilderRootPc] = useState(rootPc);
-  const [builderQuality, setBuilderQuality] = useState<ChordQuality>('maj');
   const [progression, setProgression] = useState<Chord[]>(session.chords);
   const [playIndex, setPlayIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -287,12 +230,6 @@ export function ProgressionControls(props: Props) {
     onShowVoicingRef.current(null);
   }, [progression]);
 
-  useEffect(() => {
-    if (!builderSeed) return;
-    setBuilderRootPc(mod(builderSeed.rootPc, 12));
-    setBuilderQuality(builderSeed.quality);
-  }, [builderSeed]);
-
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
   useEffect(() => {
@@ -303,17 +240,6 @@ export function ProgressionControls(props: Props) {
   const midiReady = midiEngine.enabled && !!midiEngine.outputId;
   // The built-in synth makes sound on its own; MIDI output is optional extra.
   const soundReady = synth.supported || midiReady;
-
-  const noteOptions = Array.from({ length: 12 }, (_, d) => ({
-    concertPc: mod(d - shift, 12),
-    label: noteName(d),
-  }));
-
-  const builderChord = buildChord(builderRootPc, builderQuality);
-  const diatonicChords = diatonicIntervals.map((_, d) =>
-    buildDiatonicChord(rootPc, diatonicIntervals, d, useSevenths),
-  );
-  const selectedIdx = activeChord ? progression.indexOf(activeChord) : -1;
 
   const voice = (chord: Chord): number[] => chordToMidi(chord.rootPc, chord.tones.map((t) => t.interval), octave);
   const fretRange = useMemo<[number, number] | undefined>(
@@ -371,45 +297,6 @@ export function ProgressionControls(props: Props) {
     voicingSetStart,
   ]);
   const tabFileName = `fretboard-${noteName(mod(rootPc + shift, 12)).replace(/#/g, 'sharp')}-progression.txt`;
-
-  const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
-  const preview = (chord: Chord) => {
-    onShowChord(chord);
-    hear(chord);
-  };
-
-  const setRoot = (pc: number) => {
-    setBuilderRootPc(pc);
-    onShowChord(buildChord(pc, builderQuality));
-  };
-  const setQuality = (q: ChordQuality) => {
-    setBuilderQuality(q);
-    onShowChord(buildChord(builderRootPc, q));
-  };
-
-  const addChord = (chord: Chord) => {
-    setProgression((p) => [...p, chord]);
-    onShowChord(chord);
-  };
-  const removeAt = (i: number) => setProgression((p) => p.filter((_, k) => k !== i));
-  const clearProg = () => {
-    stop();
-    setProgression([]);
-    setPlayIndex(-1);
-  };
-
-  const loadChords = (chords: Chord[]) => {
-    stop();
-    setProgression(chords);
-    setPlayIndex(-1);
-    if (chords[0]) onShowChord(chords[0]);
-  };
-  const genTemplate = () => {
-    const t = getTemplate(templateId);
-    if (t) loadChords(t.build({ rootPc, intervals }));
-  };
-  const genRandom = () =>
-    loadChords(generateProgression({ rootPc, intervals }, { sevenths: useSevenths, chromaticism: spicy ? 0.35 : 0 }));
 
   const play = () => {
     const chords = progression;
@@ -488,134 +375,6 @@ export function ProgressionControls(props: Props) {
         {!soundReady && <span className="midi-note muted">Sound isn&rsquo;t available in this browser.</span>}
       </div>
 
-      {/* Chord builder: any root + any quality, in or out of key */}
-      <div className="prog-row">
-        <span className="prog-sublabel">Build</span>
-        <label className="midi-field">
-          Root
-          <select value={builderRootPc} onChange={(e) => setRoot(Number(e.target.value))}>
-            {noteOptions.map((o) => (
-              <option key={o.concertPc} value={o.concertPc}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="midi-field">
-          Quality
-          <select value={builderQuality} onChange={(e) => setQuality(e.target.value as ChordQuality)}>
-            {QUALITY_GROUPS.map((g) => (
-              <optgroup key={g.group} label={g.group}>
-                {g.items.map((q) => (
-                  <option key={q.key} value={q.key}>
-                    {q.symbol === '' ? 'maj' : q.symbol} &mdash; {q.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <button className="btn-mini" onClick={() => preview(builderChord)}>
-          Show
-        </button>
-        <button className="btn-mini" onClick={() => addChord(builderChord)}>
-          Add &rarr;
-        </button>
-        <button className="btn-mini" onClick={() => hear(builderChord)} disabled={!soundReady}>
-          &#9654; Hear
-        </button>
-        <button
-          type="button"
-          className={identifyOn ? 'btn-mini active' : 'btn-mini'}
-          aria-pressed={identifyOn}
-          onClick={onToggleIdentify}
-        >
-          Identify
-        </button>
-      </div>
-
-      {/* One-click diatonic chords of the current key */}
-      <div className="prog-row">
-        <span className="prog-sublabel" title={parentName ? `From the ${parentName} of this root` : undefined}>
-          Diatonic
-        </span>
-        <div className="btn-row">
-          {diatonicChords.map((ch, d) => {
-            const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
-            return (
-              <button
-                key={d}
-                className={chordPaintClass('btn-mini', painted)}
-                title={painted ? chordColorTitle(ch, rootPc, intervals) : chordSymbol(ch, shift)}
-                onClick={() => addChord(ch)}
-              >
-                {romanForChord(rootPc, ch)}
-              </button>
-            );
-          })}
-        </div>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={useSevenths} onChange={(e) => setUseSevenths(e.target.checked)} /> 7th
-          chords
-        </label>
-      </div>
-
-      {/* Generators */}
-      <div className="prog-row">
-        <span className="prog-sublabel">Generate</span>
-        <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-          {PROGRESSION_TEMPLATES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} &middot; {t.hint}
-            </option>
-          ))}
-        </select>
-        <button className="btn-mini" onClick={genTemplate}>
-          Use template
-        </button>
-        <button className="btn-mini" onClick={genRandom}>
-          Random
-        </button>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={spicy} onChange={(e) => setSpicy(e.target.checked)} /> Borrowed /
-          secondary
-        </label>
-      </div>
-
-      {/* The progression */}
-      <div className="prog-chips">
-        {progression.length === 0 && (
-          <span className="muted">No chords yet &mdash; add some above or generate a progression.</span>
-        )}
-        {progression.map((ch, i) => {
-          const painted = colorChordsByRoot ? classifyChord(ch, rootPc, intervals) : null;
-          const out = !painted && !chordInKey(scalePcs, ch);
-          const cls = [
-            chordPaintClass('prog-chip', painted),
-            i === playIndex ? 'playing' : '',
-            i === selectedIdx && !playing ? 'selected' : '',
-            out ? 'out' : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
-          return (
-            <span key={i} className={cls}>
-              <button
-                className="prog-chip-main"
-                onClick={() => preview(ch)}
-                title={painted ? chordColorTitle(ch, rootPc, intervals) : out ? 'Outside the key' : 'In key'}
-              >
-                <span className="prog-chip-symbol">{chordSymbol(ch, shift)}</span>
-                <span className="prog-chip-roman">{romanForChord(rootPc, ch)}</span>
-              </button>
-              <button className="prog-chip-x" onClick={() => removeAt(i)} aria-label="Remove chord">
-                &times;
-              </button>
-            </span>
-          );
-        })}
-      </div>
-
       {/* Transport */}
       <div className="prog-row">
         <label className="midi-field">
@@ -673,8 +432,13 @@ export function ProgressionControls(props: Props) {
         <button className="btn-mini" onClick={stop}>
           &#9632; Stop
         </button>
-        <button className="btn-mini" onClick={clearProg} disabled={progression.length === 0}>
-          Clear
+        <button
+          type="button"
+          className={identifyOn ? 'btn-mini active' : 'btn-mini'}
+          aria-pressed={identifyOn}
+          onClick={onToggleIdentify}
+        >
+          Identify
         </button>
         <button
           className="btn-mini"

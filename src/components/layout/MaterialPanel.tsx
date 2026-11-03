@@ -1,5 +1,9 @@
+import type { Chord } from '../../music/chords';
+import type { SuggestStyle } from '../../state/v2/suggest';
 import type { MaterialType, NameStyle, KeySelection, Step } from '../../state/v2/types';
+import { AddChord } from './AddChord';
 import { KeyPanel } from './KeyPanel';
+import { SuggestPanel } from './SuggestPanel';
 
 const NOTES: Record<MaterialType, string> = {
   scale: 'One scale, on the staff, the neck, and the keyboard.',
@@ -21,6 +25,8 @@ export function MaterialPanel({
   steps,
   heldMidis,
   onKey,
+  onAddChord,
+  onSuggest,
 }: {
   type: MaterialType;
   onType: (type: MaterialType) => void;
@@ -29,6 +35,8 @@ export function MaterialPanel({
   steps: Step[];
   heldMidis: ReadonlySet<number>;
   onKey: (key: KeySelection) => void;
+  onAddChord: (chord: Chord, bassPc?: number) => void;
+  onSuggest: (style: SuggestStyle, borrowed: boolean) => void;
 }) {
   return (
     <aside className="material-panel" data-testid="material-panel">
@@ -55,14 +63,8 @@ export function MaterialPanel({
 
       <KeyPanel selection={selection} names={names} steps={steps} heldMidis={heldMidis} onKey={onKey} />
 
-      <section data-testid="add-chord">
-        <h2>Add chord</h2>
-        <div data-testid="chord-palette" className="panel-slot" />
-      </section>
-
-      <section data-testid="suggest-panel">
-        <h2>Suggest</h2>
-      </section>
+      <AddChord selection={selection} onAdd={onAddChord} />
+      <SuggestPanel onSuggest={onSuggest} />
 
       <section data-testid="voicing-panel">
         <h2>Voicing</h2>

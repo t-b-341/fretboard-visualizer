@@ -130,6 +130,32 @@ describe('reduceApp', () => {
     expect(reset.view.names).toBe('standard');
     expect(reset.settings.startIn).toBe('default');
   });
+
+  it('adds steps, switches to a progression, and keeps a locked step when suggesting', () => {
+    const state = createDefaultV2();
+    const first = reduceApp(state, { type: 'addChord', chord: buildChord(0, 'm7'), id: 'a' });
+    expect(first.material.type).toBe('chord');
+    expect(first.material.steps).toHaveLength(1);
+    expect(first.material.steps[0].source).toBe('manual');
+    const second = reduceApp(first, { type: 'addChord', chord: buildChord(5, '7'), id: 'b' });
+    expect(second.material.type).toBe('progression');
+    const locked = reduceApp(second, { type: 'toggleLock', index: 1 });
+    expect(locked.material.steps[1].locked).toBe(true);
+    const suggested = reduceApp(locked, {
+      type: 'suggest',
+      style: 'jazz',
+      borrowed: false,
+      seed: 1,
+      ids: ['n1', 'n2', 'n3'],
+    });
+    expect(suggested.material.steps[1].chord).toEqual(buildChord(5, '7'));
+    expect(suggested.material.steps[1].locked).toBe(true);
+    expect(suggested.material.steps[0].source).toBe('suggested');
+    expect(suggested.material.steps.length).toBeGreaterThanOrEqual(2);
+    const rerolled = reduceApp(suggested, { type: 'rerollStep', index: 0, seed: 3 });
+    expect(rerolled.material.steps[1]).toBe(suggested.material.steps[1]);
+    expect(rerolled.material.steps[0].chord).not.toEqual(suggested.material.steps[0].chord);
+  });
 });
 
 describe('scheduleLastSave', () => {

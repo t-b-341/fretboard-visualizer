@@ -1,6 +1,7 @@
 // Old view model for deriveView. Chord and progression both use the chord
 // view so the current step is what the staff, neck, and keyboard draw.
 
+import { placeBassLowest } from '../../music/parseChord';
 import type { NoteQuizSettings } from '../../music/quiz';
 import { TUNING_PRESETS } from '../../music/tunings';
 import type { GuitarString } from '../../music/tunings';
@@ -79,7 +80,7 @@ export function toLegacy(state: AppStateV2): AppState {
     chordDisplay: shape === 'all' ? 'all' : 'voicing',
     voicingIndex: step?.voicingIndex ?? 0,
     triadDegree: 0,
-    activeChord: step ? step.chord : null,
+    activeChord: step ? placeBassLowest(step.chord, step.bassPc) : null,
     labelMode: view.names,
     displayMode: view.labels === 'degrees' ? 'degree' : 'note',
     instrumentView: instrumentViewOf(state),

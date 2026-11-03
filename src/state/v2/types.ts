@@ -19,6 +19,8 @@ export type StartIn = 'last' | 'default';
 export interface Step {
   id: string;
   chord: Chord;
+  /** Slash bass, when the lowest note is not the chord root. */
+  bassPc?: number;
   locked: boolean;
   voicingIndex: number;
   source: StepSource;

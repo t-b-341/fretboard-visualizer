@@ -137,7 +137,7 @@ export interface Chord {
 
 export type ChordQuality =
   | 'maj' | 'min' | 'dim' | 'aug'
-  | 'sus2' | 'sus4'
+  | 'sus2' | 'sus4' | '7sus4'
   | '6' | 'm6' | '69'
   | 'maj7' | '7' | 'm7' | 'm7b5' | 'dim7' | 'mMaj7'
   | 'maj9' | '9' | 'm9' | 'add9' | 'madd9'
@@ -165,6 +165,7 @@ export const CHORD_QUALITIES: ChordQualityDef[] = [
   // Suspended
   { key: 'sus2', name: 'suspended 2nd', symbol: 'sus2', group: 'Suspended', tones: [[0, '1'], [2, '2'], [7, '5']] },
   { key: 'sus4', name: 'suspended 4th', symbol: 'sus4', group: 'Suspended', tones: [[0, '1'], [5, '4'], [7, '5']] },
+  { key: '7sus4', name: 'dominant 7th suspended 4th', symbol: '7sus4', group: 'Suspended', tones: [[0, '1'], [5, '4'], [7, '5'], [10, 'b7']] },
   // Sixths
   { key: '6', name: 'major 6th', symbol: '6', group: 'Sixths', tones: [[0, '1'], [4, '3'], [7, '5'], [9, '6']] },
   { key: 'm6', name: 'minor 6th', symbol: 'm6', group: 'Sixths', tones: [[0, '1'], [3, 'b3'], [7, '5'], [9, '6']] },

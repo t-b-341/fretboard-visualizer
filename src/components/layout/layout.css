@@ -18,8 +18,12 @@
 .app-tabs a,
 .header-button,
 .step-nav button,
+.step-actions button,
+.add-chord-row button,
+.add-step,
 .settings-drawer button,
-.view-bar label {
+.view-bar label,
+.check-line {
   min-height: 36px;
 }
 
@@ -39,6 +43,9 @@
 
 .header-button,
 .step-nav button,
+.step-actions button,
+.add-chord-row button,
+.add-step,
 .settings-drawer button {
   background: var(--panel);
   color: var(--text);
@@ -53,6 +60,12 @@
 .app-tabs a:focus-visible,
 .step-chip:focus-visible,
 .step-nav button:focus-visible,
+.step-actions button:focus-visible,
+.add-chord-row button:focus-visible,
+.add-chord-row input:focus-visible,
+.add-step:focus-visible,
+.palette-row button:focus-visible,
+.suggest-go:focus-visible,
 .settings-drawer button:focus-visible,
 .view-bar input:focus-visible {
   outline: 2px solid var(--accent);
@@ -237,7 +250,15 @@
   min-height: 36px;
 }
 
-.steps-strip,
+.steps-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
 .view-bar {
   display: flex;
   flex-wrap: wrap;
@@ -245,6 +266,13 @@
   gap: 12px;
   padding: 10px 12px;
   margin-bottom: 14px;
+}
+
+.steps-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
 
 .step-chips {
@@ -260,6 +288,7 @@
 }
 
 .step-chip {
+  position: relative;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -299,6 +328,120 @@
 
 .step-roman {
   opacity: 0.8;
+}
+
+.step-fn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.step-lock {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.step-why {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-actions button:disabled,
+.step-nav button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.add-step {
+  border-radius: 999px;
+}
+
+.add-chord-row {
+  display: flex;
+  gap: 8px;
+}
+
+.add-chord-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  font: inherit;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  color: #ff8d8d;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.palette-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.palette-row button {
+  min-width: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #141820;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.palette-deg-0 { background: var(--deg-0); }
+.palette-deg-1 { background: var(--deg-1); }
+.palette-deg-2 { background: var(--deg-2); }
+.palette-deg-3 { background: var(--deg-3); }
+.palette-deg-4 { background: var(--deg-4); }
+.palette-deg-5 { background: var(--deg-5); }
+.palette-deg-6 { background: var(--deg-6); }
+
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.suggest-panel .field,
+.suggest-go {
+  margin-top: 8px;
+}
+
+.suggest-panel select {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .view-toggles {
