@@ -1,5 +1,7 @@
 # Fretboard Visualizer
 
+UI rebuild in progress on branch ui-v2. See docs/ui-spec.md.
+
 Fretboard and piano keyboard for scales, chords, and progressions on 6-string bass and 7- and 8-string guitars.
 
 ## Features
