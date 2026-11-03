@@ -29,7 +29,7 @@ Left: Material panel, top to bottom
 Right: main column, top to bottom
 1. Steps strip: one chip per step (symbol, roman numeral, function tag T/SD/D, locked state, colored by root degree; dashed border if borrowed, gray if outside the key). Controls: ‹ Prev, Play, Next ›, Tempo, Loop, Export (MIDI file, tab text, copy tab). Under the chips: "Why:" line for the current step and "Next:" line describing each voice's motion to the next step. Buttons: Lock/Unlock this step, Reroll this step, Remove. "+ Add step" at the end.
 2. View bar: checkboxes Staff, Neck, Keyboard (all on by default); Labels Notes|Degrees; Names Concert|Standard; "Intervals from…" (click a note to relabel everything as intervals from it; Escape clears); Show key (dim rest of the key); Voice motion (dashed rings and motion lines toward the next step).
-3. Staff card (on top): grand staff with every step as a measure, the current step highlighted. Toggle Concert | Guitar written in the card header.
+3. Staff card (on top): grand staff with every step as a measure, the current step highlighted. Toggle Concert | Written in the card header. Written follows the instrument: guitar on treble, 6-string bass on bass.
 4. Neck card: fretboard; "Pick notes (identify)" tool in the card header.
 5. Keyboard card.
 Each card shows a small legend of only what that card uses.
@@ -86,7 +86,7 @@ Practice tab: one quiz. Reference views are hidden while a question is open.
 | Role/Degree color, Color chords by root | Removed; fixed color rules above |
 | Ghost key notes | View bar › Show key |
 | Guide tones | View bar › Voice motion |
-| Staff Concert/Guitar written | Staff card header |
+| Staff Concert/Written | Staff card header |
 | Legend | Small legend per card |
 | Identify view, Identify (progression bar) | Neck card › Pick notes tool |
 | Send to builder | Add as step |

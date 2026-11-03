@@ -240,22 +240,30 @@ input:focus {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.staff-clef-glyph {
+.staff-clef {
   fill: var(--text);
-  font-family: "Segoe UI Symbol", "Noto Music", "Bravura Text", "Apple Symbols", "FreeSerif", serif;
-}
-.staff-clef-treble {
-  font-size: 74px;
-}
-.staff-clef-bass {
-  font-size: 58px;
 }
 .staff-clef-eight,
-.staff-ottava {
+.staff-ottava,
+.staff-chord {
   fill: var(--text);
   font-size: 13px;
   font-weight: 700;
-  font-family: inherit;
+  font-family: var(--font-sans);
+}
+.staff-chord {
+  font-size: 14px;
+}
+.staff-notehead-ink {
+  fill: var(--text);
+  stroke: rgba(28, 25, 21, 0.35);
+  stroke-width: 1.25;
+}
+.staff-measure {
+  cursor: pointer;
+}
+.staff-current {
+  pointer-events: none;
 }
 .staff-ottava {
   font-size: 11px;

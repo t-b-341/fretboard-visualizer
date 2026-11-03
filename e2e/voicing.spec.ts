@@ -14,14 +14,11 @@ async function addSymbol(page: Page, symbol: string) {
 }
 
 async function staffMidis(page: Page): Promise<number[]> {
-  const label = await page.locator('svg.staff').getAttribute('aria-label');
-  const match = /MIDI\s+((?:\d+\s*)+)/.exec(label ?? '');
-  if (!match) throw new Error(`Staff label has no MIDI notes: ${label}`);
-  return match[1]
-    .trim()
-    .split(/\s+/)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const midis = await page.locator('svg.staff .staff-measure.is-current [data-midi]').evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute('data-midi'))).sort((a, b) => a - b),
+  );
+  if (midis.length === 0) throw new Error('Current measure has no notes');
+  return midis;
 }
 
 async function keyboardMidis(page: Page): Promise<number[]> {

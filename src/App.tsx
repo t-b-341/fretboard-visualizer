@@ -25,6 +25,7 @@ import { downloadBytes } from './components/layout/ExportMenu';
 import { formatVoiceMotion, linkVoices, nextStepIndex } from './music/voiceMotion';
 import type { MotionPoint } from './music/voiceMotion';
 import { chordSymbol } from './music/chords';
+import { keyLabel } from './music/keyLabel';
 import type { ChordToneRole } from './music/chords';
 import { mod, noteName } from './music/notes';
 import type { NoteQuizSettings } from './music/quiz';
@@ -317,6 +318,7 @@ export default function App() {
           const voicing = choice?.voicings[choice.index];
           return {
             chord: step.chord,
+            symbol: columnLabel(step),
             voicingMidis: voicing && voicing.notes.length > 0 ? voicing.notes.map((note) => note.midi) : null,
           };
         });
@@ -402,7 +404,33 @@ export default function App() {
               onVoiceMotion={(voiceMotion) => setView({ voiceMotion })}
             />
             {state.view.staff && (
-              <ViewCard title="Staff" testId="staff-card" className="staff-card">
+              <ViewCard
+                title="Staff"
+                testId="staff-card"
+                className="staff-card"
+                extra={
+                  <div className="segmented" role="radiogroup" aria-label="Staff pitch">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={state.view.staffPitch !== 'guitar'}
+                      className={state.view.staffPitch === 'guitar' ? undefined : 'active'}
+                      onClick={() => setView({ staffPitch: 'concert' })}
+                    >
+                      Concert
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={state.view.staffPitch === 'guitar'}
+                      className={state.view.staffPitch === 'guitar' ? 'active' : undefined}
+                      onClick={() => setView({ staffPitch: 'guitar' })}
+                    >
+                      Written
+                    </button>
+                  </div>
+                }
+              >
                 <GrandStaff
                   viewMode={legacy.viewMode}
                   rootPc={legacy.rootPc}
@@ -411,7 +439,7 @@ export default function App() {
                   voicingMidis={shownVoicing ? shownVoicing.notes.map((note) => note.midi) : null}
                   pickedMidis={derived.pickedNotes.map((note) => note.midi)}
                   guitarWritten={state.view.staffPitch === 'guitar'}
-                  onGuitarWritten={(guitarWritten) => setView({ staffPitch: guitarWritten ? 'guitar' : 'concert' })}
+                  writtenStaff={state.settings.instrument.numStrings === 6 ? 'bass' : 'treble'}
                   labelMode={legacy.labelMode}
                   colorByDegree={derived.colorByDegree}
                   compareEnabled={legacy.compareEnabled}
@@ -421,6 +449,8 @@ export default function App() {
                   onReference={referenceOn ? chooseReference : undefined}
                   measures={staffMeasures}
                   currentMeasure={stepIndex}
+                  onSelectMeasure={setCurrentStep}
+                  scaleLabel={keyLabel(state.material.key.rootPc, state.material.key.modeKey, derived.shift)}
                   dimRest={state.view.voiceMotion}
                   soundingDegree={scaleSound?.degree ?? null}
                 />

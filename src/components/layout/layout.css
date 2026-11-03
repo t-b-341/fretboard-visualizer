@@ -112,6 +112,18 @@
   font-weight: 650;
 }
 
+.view-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+
+.view-card-head h2 {
+  margin: 0;
+}
+
 .compare-panel {
   margin-top: 8px;
 }
@@ -591,6 +603,7 @@
   --text: var(--staff-ink);
   --muted: #5e584e;
   --panel: var(--staff-paper);
+  --panel-2: #e6e0d4;
   --border: #ddd6c8;
 }
 
