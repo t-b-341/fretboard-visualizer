@@ -1,0 +1,12 @@
+---
+description: UI rules for the fretboard visualizer v2 layout
+globs: src/**/*.tsx, src/**/*.css, src/state/**, src/urlState.ts
+alwaysApply: true
+---
+- Read docs/ui-spec.md before changing any UI file.
+- One control per job. Before adding a control, search the codebase for an existing one that does the same thing and reuse it.
+- Put each control exactly where docs/ui-spec.md says. If you need a new control or a different place, update docs/ui-spec.md in the same change and say so in your summary.
+- Don't change behavior in src/music/ unless the task says so. Prefer calling existing music functions over writing new ones.
+- Every area keeps its data-testid from the spec.
+- A task is done only when npm test, npm run typecheck, npm run build and npm run test:e2e all pass (test:e2e once it exists).
+- Never leave a dead control: if a control is replaced, delete the old one and its unused state.
