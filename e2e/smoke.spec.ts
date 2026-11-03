@@ -20,10 +20,9 @@ test('loads with no errors and draws note labels on the neck', async ({ page }) 
   await expect(page.locator('svg.fretboard')).toBeVisible();
 });
 
-test('shows the staff when Staff is turned on', async ({ page }) => {
+test('shows the staff on the workspace', async ({ page }) => {
   await openApp(page);
-  await expect(page.locator('svg.staff')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Staff', exact: true }).click();
+  await expect(page.getByTestId('staff-card')).toBeVisible();
   await expect(page.locator('svg.staff')).toBeVisible();
 });
 
@@ -42,6 +41,7 @@ test('installs a fake MIDI input named Fake Keys', async ({ page, context }) => 
 test('records oscillator starts when a scale is played', async ({ page, context }) => {
   await recordSynth(context);
   await openApp(page);
+  await page.getByText('Legacy controls (temporary)').click();
   await page.getByRole('button', { name: /Play scale/ }).click();
   await expect.poll(async () => page.evaluate(() => window.__played ?? [])).not.toEqual([]);
   const played = await page.evaluate(() => window.__played);

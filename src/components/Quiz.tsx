@@ -555,7 +555,7 @@ export function Quiz({
       {!api.heatmap && (
         <div className="note-quiz-ask">
           <p className="quiz-kicker">{kind ? KIND_LABEL[kind] : 'Note quiz'}</p>
-          <p className="quiz-prompt" data-quiz-prompt data-question-type={kind ?? ''} aria-live="polite">
+          <p className="quiz-prompt" data-testid="quiz-prompt" data-quiz-prompt data-question-type={kind ?? ''} aria-live="polite">
             {api.feedback || question?.prompt || emptyMessage(api.empty)}
           </p>
           {draft && api.phase === 'ask' && question?.type === 'nameNote' && (
