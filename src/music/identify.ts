@@ -172,3 +172,24 @@ export function identifyChord(notes: { pc: number; midi: number }[]): ChordCandi
 
   return found.slice(0, 3).map(({ catalog: _catalog, ...candidate }) => candidate);
 }
+
+/**
+ * Picked fretboard notes plus MIDI notes currently held, one entry per MIDI
+ * number. Held notes replace a pick of the same pitch. Out-of-range numbers
+ * are dropped.
+ */
+export function heldChordNotes(
+  picked: readonly { pc: number; midi: number }[],
+  held: Iterable<number>,
+): { pc: number; midi: number }[] {
+  const byMidi = new Map<number, { pc: number; midi: number }>();
+  for (const note of picked) {
+    if (!Number.isInteger(note.midi) || note.midi < 0 || note.midi > 127) continue;
+    byMidi.set(note.midi, { pc: mod(note.pc, 12), midi: note.midi });
+  }
+  for (const midi of held) {
+    if (!Number.isInteger(midi) || midi < 0 || midi > 127) continue;
+    byMidi.set(midi, { pc: mod(midi, 12), midi });
+  }
+  return [...byMidi.values()].sort((a, b) => a.midi - b.midi);
+}

@@ -38,7 +38,15 @@ function readBoot(): { app: AppState; progression: ProgressionSnapshot; named: N
 
 export function useAppState() {
   const [boot] = useState(readBoot);
-  const [state, setState] = useState<AppState>(() => decodeState(window.location.search, createInitialState()));
+  // The address bar owns the shareable setup. The MIDI input choice is local:
+  // it comes back from the last session, and a missing device falls back to none.
+  const [state, setState] = useState<AppState>(() => {
+    const next = decodeState(window.location.search, createInitialState());
+    next.midiInputName = boot.app.midiInputName;
+    next.showPlayedNotes = boot.app.showPlayedNotes;
+    next.soundPlayedNotes = boot.app.soundPlayedNotes;
+    return next;
+  });
   const [playbackVoicing, setPlaybackVoicing] = useState<Voicing | null>(null);
   const [named, setNamed] = useState<NamedSetup[]>(boot.named);
   const [session, setSession] = useState<ProgressionSnapshot>(boot.progression);

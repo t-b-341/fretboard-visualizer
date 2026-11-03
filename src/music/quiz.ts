@@ -336,6 +336,41 @@ export function gradeAnswer(
   return { correct: false, precision: 0, recall: 0, right: [], wrong: [], labels, entries: [] };
 }
 
+/**
+ * A played MIDI note answers "name this note" and the reverse-interval
+ * question by pitch class (any octave). Other question types stay on the
+ * pad and the fretboard. Returns null when this note does not answer.
+ */
+export function gradePlayedNote(
+  question: NoteQuizQuestion,
+  midi: number,
+  pool: readonly Cell[],
+  shift: number,
+  key: QuizKey | null,
+): GradeResult | null {
+  if (!Number.isInteger(midi) || midi < 0 || midi > 127) return null;
+  const pc = mod(midi, 12);
+
+  if (question.type === 'nameNote' && question.target) {
+    const spelled = spelledName(question.target.midi, shift, key);
+    const match = mod(question.target.pc, 12) === pc;
+    return gradeAnswer(question, { name: match ? spelled : '' }, pool, shift, key);
+  }
+
+  if (question.type === 'intervalFromRoot' && question.reverse && question.root && question.semitones != null) {
+    const expectedPc = mod(question.root.pc + question.semitones, 12);
+    if (pc === expectedPc) {
+      const cell = question.answerCells[0];
+      if (!cell) return null;
+      return gradeAnswer(question, { cells: [cell] }, pool, shift, key);
+    }
+    const wrong = pool.find((cell) => mod(cell.pc, 12) === pc);
+    return gradeAnswer(question, { cells: wrong ? [wrong] : [] }, pool, shift, key);
+  }
+
+  return null;
+}
+
 function nameOfCell(cell: Cell, shift: number, key: QuizKey | null): string {
   return spelledName(cell.midi, shift, key);
 }

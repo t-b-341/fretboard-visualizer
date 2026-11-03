@@ -64,6 +64,21 @@ interface Props {
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
   /** Note quiz. Replaces ordinary highlighting for as long as it is set. */
   practice?: PracticeOverlay | null;
+  /** MIDI notes held from an input, drawn at every position with that exact number. */
+  showPlayed?: boolean;
+  playedMidis?: ReadonlySet<number>;
+}
+
+const NO_PLAYED: ReadonlySet<number> = new Set();
+
+function PlayedMark({ x, y, on }: { x: number; y: number; on: boolean }) {
+  if (!on) return null;
+  return (
+    <g className="played-mark">
+      <circle className="note-played-edge" cx={x} cy={y} r={R + 4} />
+      <circle className="note-played" cx={x} cy={y} r={R + 4} />
+    </g>
+  );
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -104,6 +119,8 @@ export function Fretboard(props: Props) {
     evaluate,
     window: positionWindow,
     practice,
+    showPlayed = false,
+    playedMidis = NO_PLAYED,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -315,11 +332,12 @@ export function Fretboard(props: Props) {
             row.map((cell) => {
               if (hidden.has(cell.stringIndex)) return null;
               if (cell.fret < from || cell.fret > to) return null;
-              if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
+              const played = showPlayed && playedMidis.has(cell.midi);
+              if (allow && !allow.has(cellKey) && !played) return null;
               if (practice) {
                 const mark = practice.marks[cellKey];
-                if (!mark && !practice.heatmap && !practice.listen) return null;
+                if (!mark && !practice.heatmap && !practice.listen && !played) return null;
                 const x = X(noteX(cell.fret));
                 const y = stringY(cell.stringIndex);
                 const label = mark?.label ?? '';
@@ -336,6 +354,7 @@ export function Fretboard(props: Props) {
                       <circle className="note-target" cx={x} cy={y} r={R} />
                     )}
                     {mark?.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                    <PlayedMark x={x} y={y} on={played} />
                     {label && (
                       <text
                         className={label.length > 2 ? 'practice-label practice-label-long' : 'practice-label'}
@@ -363,10 +382,11 @@ export function Fretboard(props: Props) {
                   ? answerQuiz(cell.stringIndex, cell.fret, cell.pc, cell.midi)
                   : activate(cell.stringIndex, cell.fret, cell.midi);
               if (!ev) {
-                if (!picking && !quizzing) return null;
+                if (!picking && !quizzing && !played) return null;
                 return (
                   <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
-                    <circle className="note-target" cx={x} cy={y} r={R} />
+                    {(picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
               }
@@ -375,6 +395,7 @@ export function Fretboard(props: Props) {
                   <g key={key} className={noteClass(cell.fret)} onClick={() => play(cell.midi)}>
                     <circle className="note-ghost" cx={x} cy={y} r={4.5} />
                     {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
               }
@@ -384,6 +405,7 @@ export function Fretboard(props: Props) {
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
                   {ev.outside && <circle className="note-outside-ring" cx={x} cy={y} r={R + 3} />}
+                  <PlayedMark x={x} y={y} on={played} />
                   <text
                     className={noteTextClass(ev, degreeColors)}
                     x={x}

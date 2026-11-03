@@ -65,6 +65,28 @@ describe('mergeApp', () => {
     expect(loaded.noteQuiz.harmonic).toBe(true);
   });
 
+  it('keeps the MIDI input name and played-note toggles, and fills them in for older setups', () => {
+    expect(createInitialState().midiInputName).toBe('');
+    expect(createInitialState().showPlayedNotes).toBe(true);
+    expect(createInitialState().soundPlayedNotes).toBe(false);
+
+    const loaded = mergeApp({
+      midiInputName: 'Keystation 61',
+      showPlayedNotes: false,
+      soundPlayedNotes: true,
+    });
+    expect(loaded.midiInputName).toBe('Keystation 61');
+    expect(loaded.showPlayedNotes).toBe(false);
+    expect(loaded.soundPlayedNotes).toBe(true);
+
+    const older = mergeApp({ rootPc: 0 });
+    expect(older.midiInputName).toBe('');
+    expect(older.showPlayedNotes).toBe(true);
+    expect(older.soundPlayedNotes).toBe(false);
+    expect(mergeApp({ midiInputName: '  ' }).midiInputName).toBe('');
+    expect(mergeApp({ midiInputName: 12 }).midiInputName).toBe('');
+  });
+
   it('does not restore an identify grip', () => {
     expect(mergeApp({ picked: { 0: 3, 2: 5 } }).picked).toEqual({});
     const app = createInitialState();

@@ -8,16 +8,84 @@
 interface MidiPortLike {
   id: string;
   name?: string | null;
+  state?: string;
 }
 interface MidiOutputLike extends MidiPortLike {
   send(data: number[], timestamp?: number): void;
 }
-interface MidiAccessLike {
+export interface MidiInputPort extends MidiPortLike {
+  onmidimessage: ((event: { data?: ArrayLike<number> }) => void) | null;
+}
+export interface MidiAccessLike {
   outputs: Map<string, MidiOutputLike>;
+  inputs?: Map<string, MidiInputPort>;
   onstatechange: ((e: unknown) => void) | null;
 }
 interface NavigatorWithMidi {
   requestMIDIAccess?: (opts?: { sysex?: boolean }) => Promise<MidiAccessLike>;
+}
+
+type AccessListener = () => void;
+
+let sharedAccess: MidiAccessLike | null = null;
+let accessRequest: Promise<boolean> | null = null;
+const accessListeners = new Set<AccessListener>();
+
+/** True when this browser exposes Web MIDI. Firefox and Safari usually do not. */
+export function webMidiSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof (navigator as unknown as NavigatorWithMidi).requestMIDIAccess === 'function'
+  );
+}
+
+export function currentMidiAccess(): MidiAccessLike | null {
+  return sharedAccess;
+}
+
+/** Fires when a port connects or disconnects, and once access is first granted. */
+export function onMidiAccessChange(fn: AccessListener): () => void {
+  accessListeners.add(fn);
+  return () => {
+    accessListeners.delete(fn);
+  };
+}
+
+function emitAccess() {
+  accessListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* one listener must not stop the others from seeing the new port list */
+    }
+  });
+}
+
+/**
+ * Ask for Web MIDI once and share the result. Output and input both listen
+ * through `onMidiAccessChange`, so neither overwrites the other's port handler.
+ * Resolves false when MIDI is missing or the user denies the prompt.
+ */
+export async function requestMidiAccess(): Promise<boolean> {
+  if (sharedAccess) return true;
+  if (!webMidiSupported()) return false;
+  if (!accessRequest) {
+    const nav = navigator as unknown as NavigatorWithMidi;
+    accessRequest = nav
+      .requestMIDIAccess!({ sysex: false })
+      .then((access) => {
+        sharedAccess = access;
+        access.onstatechange = () => emitAccess();
+        emitAccess();
+        return true;
+      })
+      .catch(() => {
+        accessRequest = null;
+        sharedAccess = null;
+        return false;
+      });
+  }
+  return accessRequest;
 }
 
 export interface MidiOutputInfo {
@@ -54,12 +122,10 @@ class MidiEngine {
   /** MIDI note held as a drone. Note-offs for this pitch are ignored. */
   private drone: number | null = null;
   private listeners = new Set<Listener>();
+  private unsubAccess: (() => void) | null = null;
 
   get supported(): boolean {
-    return (
-      typeof navigator !== 'undefined' &&
-      typeof (navigator as unknown as NavigatorWithMidi).requestMIDIAccess === 'function'
-    );
+    return webMidiSupported();
   }
 
   get enabled(): boolean {
@@ -79,24 +145,25 @@ class MidiEngine {
 
   async enable(): Promise<boolean> {
     if (this.access) return true;
-    const nav = navigator as unknown as NavigatorWithMidi;
-    if (!nav.requestMIDIAccess) return false;
-    try {
-      this.access = await nav.requestMIDIAccess({ sysex: false });
-      this.access.onstatechange = () => {
-        // Keep a valid selection as devices come and go.
-        if (this.outputId && !this.access!.outputs.get(this.outputId)) {
-          this.outputId = this.firstOutputId();
-        }
-        this.emit();
-      };
-      if (!this.outputId) this.outputId = this.firstOutputId();
-      this.emit();
-      return true;
-    } catch {
+    const ok = await requestMidiAccess();
+    const access = currentMidiAccess();
+    if (!ok || !access) {
       this.access = null;
       return false;
     }
+    this.access = access;
+    if (!this.unsubAccess) {
+      this.unsubAccess = onMidiAccessChange(() => {
+        // Keep a valid selection as devices come and go.
+        if (this.outputId && !this.access?.outputs.get(this.outputId)) {
+          this.outputId = this.firstOutputId();
+        }
+        this.emit();
+      });
+    }
+    if (!this.outputId) this.outputId = this.firstOutputId();
+    this.emit();
+    return true;
   }
 
   private firstOutputId(): string | null {

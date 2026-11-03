@@ -70,6 +70,12 @@ export interface AppState {
   clickToHear: boolean;
   soundOctave: number;
   drone: boolean;
+  /** Web MIDI input port name. Empty selects none. A missing device stays none. */
+  midiInputName: string;
+  /** Draw notes held on the MIDI input. On unless a saved setup turns it off. */
+  showPlayedNotes: boolean;
+  /** Play MIDI input through the built-in synth. Off unless a saved setup turns it on. */
+  soundPlayedNotes: boolean;
   compareEnabled: boolean;
   compareRootPc: number;
   compareFamilyKey: FamilyKey;
@@ -131,6 +137,9 @@ export function createInitialState(): AppState {
     clickToHear: true,
     soundOctave: 4,
     drone: false,
+    midiInputName: '',
+    showPlayedNotes: true,
+    soundPlayedNotes: false,
     compareEnabled: false,
     compareRootPc: 10,
     compareFamilyKey: 'major',
@@ -188,6 +197,11 @@ function readPositionWindow(v: unknown, fretCount: number): AppState['positionWi
   const min = clampNum(v.min, 0, fretCount, base.min);
   const max = clampNum(v.max, min, fretCount, base.max);
   return { enabled: v.enabled === true, min, max };
+}
+
+function readMidiInputName(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 128);
 }
 
 function controllerBaseOf(v: unknown): ControllerBaseOctave {
@@ -315,6 +329,9 @@ export function mergeApp(raw: unknown): AppState {
     clickToHear: raw.clickToHear !== false,
     soundOctave: clampNum(raw.soundOctave, 2, 6, 4),
     drone: raw.drone === true,
+    midiInputName: readMidiInputName(raw.midiInputName),
+    showPlayedNotes: raw.showPlayedNotes !== false,
+    soundPlayedNotes: raw.soundPlayedNotes === true,
     compareEnabled: raw.compareEnabled === true,
     compareRootPc: clampNum(raw.compareRootPc, 0, 11, base.compareRootPc),
     compareFamilyKey,

@@ -30,6 +30,8 @@ class WebAudioSynth {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private voices = new Set<Voice>();
+  /** Notes held from MIDI input. Kept out of `voices` so Stop does not cut them. */
+  private heldVoices = new Map<number, Voice>();
   /** Held root. Kept out of `voices` so melodic stop() does not cut the drone. */
   private drone: Voice | null = null;
   private _volume = 0.5; // 0-1
@@ -217,6 +219,79 @@ class WebAudioSynth {
       /* ignore */
     }
     this.drone = null;
+  }
+
+  /** Resume the audio context. Call from a click before MIDI thru starts. */
+  resume() {
+    this.ensure();
+  }
+
+  /** Hold a note until `releaseHeldNote`. Used for MIDI input thru. */
+  holdNote(midi: number, velocity = 100) {
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    const note = midi & 0x7f;
+    this.releaseHeldNote(note, 0.02);
+    const now = ctx.currentTime;
+    const peak = Math.max(0.0001, (Math.max(1, Math.min(127, velocity)) / 127) * 0.28);
+    const sustain = Math.max(0.0001, peak * 0.65);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(peak, now + 0.012);
+    g.gain.exponentialRampToValueAtTime(sustain, now + 0.12);
+    g.connect(this.master);
+
+    const o1 = ctx.createOscillator();
+    o1.type = 'triangle';
+    o1.frequency.value = midiToFreq(note);
+    const o2 = ctx.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = midiToFreq(note) * 2;
+    const o2g = ctx.createGain();
+    o2g.gain.value = 0.22;
+    o1.connect(g);
+    o2.connect(o2g);
+    o2g.connect(g);
+    o1.start(now);
+    o2.start(now);
+    this.heldVoices.set(note, { oscillators: [o1, o2], gain: g });
+  }
+
+  /** Release one thru note. Missing notes are ignored. */
+  releaseHeldNote(midi: number, release = 0.06) {
+    const note = midi & 0x7f;
+    const voice = this.heldVoices.get(note);
+    if (!voice) return;
+    this.heldVoices.delete(note);
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value, 0.0001), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, release));
+      const stopAt = now + Math.max(0.02, release) + 0.03;
+      voice.oscillators.forEach((osc) => {
+        try {
+          osc.stop(stopAt);
+        } catch {
+          /* already stopped */
+        }
+      });
+      voice.oscillators[0].onended = () => {
+        try {
+          voice.gain.disconnect();
+        } catch {
+          /* already gone */
+        }
+      };
+    } catch {
+      /* ignore */
+    }
+  }
+
+  releaseAllHeld() {
+    for (const note of [...this.heldVoices.keys()]) this.releaseHeldNote(note);
   }
 
   /** Play a single note (e.g. click-to-hear). */

@@ -1,7 +1,8 @@
 // Named setups and the last session, kept in localStorage so the portable
 // HTML file can reopen on the same key, tuning, view, and progression.
-// Note-quiz settings travel inside the app blob. mergeApp fills them in when
-// an older setup has none.
+// Note-quiz settings, the MIDI input port name, and the played-note toggles
+// travel inside the app blob. mergeApp fills them in when an older setup has
+// none, and a saved port that is not connected falls back to none.
 
 const KEY = 'fretboard-visualizer:setups:v1';
 

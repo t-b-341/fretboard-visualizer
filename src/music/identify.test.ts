@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHORD_QUALITIES, buildChord } from './chords';
 import { buildGrid } from './fretboard';
-import { candidateDetail, candidateLabel, identifyChord } from './identify';
+import { candidateDetail, candidateLabel, heldChordNotes, identifyChord } from './identify';
 import { defaultPresetForStrings, getPreset } from './tunings';
 import { findVoicings } from './voicings';
 
@@ -148,6 +148,19 @@ describe('identifyChord', () => {
     expect(top.inversion).toBe('1st');
     expect(candidateLabel(top)).toBe('C/E (1st inversion)');
     expect(candidateLabel(top, 1)).toBe('Db/F (1st inversion)');
+  });
+
+  it('identifies held MIDI notes on their own and merged with a pick', () => {
+    const merged = heldChordNotes([{ pc: 0, midi: 60 }], [64, 67]);
+    expect(merged).toEqual([
+      { pc: 0, midi: 60 },
+      { pc: 4, midi: 64 },
+      { pc: 7, midi: 67 },
+    ]);
+    expect(identifyChord(merged)[0].slashName).toBe('C');
+    expect(identifyChord(heldChordNotes([], [67, 60, 64]))[0].slashName).toBe('C');
+    expect(heldChordNotes([{ pc: 0, midi: 60 }], [60])).toEqual([{ pc: 0, midi: 60 }]);
+    expect(heldChordNotes([], [-1, 128, 1.5, 60])).toEqual([{ pc: 0, midi: 60 }]);
   });
 
   it('returns nothing for fewer than two distinct pitch classes', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { Controls } from './components/Controls';
 import { FormulaBar } from './components/FormulaBar';
@@ -13,7 +13,9 @@ import type { BuilderSeed } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
 import { QuizPanel } from './components/QuizPanel';
 import { SetupBar } from './components/SetupBar';
+import { useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
+import { heldChordNotes, identifyChord } from './music/identify';
 import { mod, noteName } from './music/notes';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 import { deriveView } from './state/derive';
@@ -61,6 +63,15 @@ export default function App() {
     () => deriveView(state, session, playbackVoicing),
     [state, session, playbackVoicing],
   );
+  const held = useHeldNotes();
+  const identifyNotes = useMemo(
+    () => (state.viewMode === 'identify' ? heldChordNotes(derived.pickedNotes, held) : []),
+    [state.viewMode, derived.pickedNotes, held],
+  );
+  const identifyMatches = useMemo(
+    () => (state.viewMode === 'identify' ? identifyChord(identifyNotes) : derived.identifyMatches),
+    [state.viewMode, identifyNotes, derived.identifyMatches],
+  );
   const [builderSeed, setBuilderSeed] = useState<BuilderSeed | null>(null);
   const noteQuiz = useNoteQuiz({
     enabled: state.noteQuiz.enabled,
@@ -71,6 +82,16 @@ export default function App() {
   });
   const showFretboard =
     state.noteQuiz.enabled || state.instrumentView === 'fretboard' || state.instrumentView === 'both';
+  const answerPlayed = noteQuiz.answerPlayed;
+  const seenHeld = useRef<ReadonlySet<number> | null>(null);
+  useEffect(() => {
+    const prev = seenHeld.current;
+    seenHeld.current = held;
+    if (prev === null) return;
+    for (const midi of held) {
+      if (!prev.has(midi)) answerPlayed(midi);
+    }
+  }, [held, answerPlayed]);
 
   return (
     <div className="app">
@@ -133,6 +154,17 @@ export default function App() {
         onDrone={(drone) => update({ drone })}
         clickToHear={state.clickToHear}
         onClickToHear={(clickToHear) => update({ clickToHear })}
+        midiInputName={state.midiInputName}
+        showPlayedNotes={state.showPlayedNotes}
+        soundPlayedNotes={state.soundPlayedNotes}
+        onMidiInputName={(midiInputName) =>
+          update({
+            midiInputName,
+            showPlayedNotes: midiInputName ? true : state.showPlayedNotes,
+          })
+        }
+        onShowPlayedNotes={(showPlayedNotes) => update({ showPlayedNotes })}
+        onSoundPlayedNotes={(soundPlayedNotes) => update({ soundPlayedNotes })}
       />
 
       <ProgressionControls
@@ -178,8 +210,9 @@ export default function App() {
       <div className="instrument-views">
         {state.viewMode === 'identify' && (
           <IdentifyPanel
-            candidates={derived.identifyMatches}
-            pickedNotes={derived.pickedNotes}
+            candidates={identifyMatches}
+            notes={identifyNotes}
+            canClear={derived.pickedNotes.length > 0}
             shift={derived.shift}
             onClear={() => update({ picked: {} })}
             onSend={() => {
@@ -225,6 +258,8 @@ export default function App() {
             onPlay={(midi) => player.playNote(midi, 420)}
             caption={null}
             practice={noteQuiz.practice}
+            showPlayed={state.showPlayedNotes}
+            playedMidis={held}
           />
         )}
         {state.noteQuiz.enabled && (
@@ -261,6 +296,8 @@ export default function App() {
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateKeyboard}
             onPlay={(midi) => player.playNote(midi, 420)}
+            showPlayed={state.showPlayedNotes}
+            playedMidis={held}
           />
         )}
         {state.showStaff && (

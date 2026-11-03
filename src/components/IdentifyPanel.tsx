@@ -1,19 +1,20 @@
 import { player } from '../audio/player';
-import type { Cell } from '../music/fretboard';
 import { candidateDetail, candidateLabel, type ChordCandidate } from '../music/identify';
 
 interface Props {
   candidates: ChordCandidate[];
-  pickedNotes: Cell[];
+  notes: { pc: number; midi: number }[];
+  /** Fretboard picks can be cleared. Held MIDI notes release with the key. */
+  canClear: boolean;
   shift: number;
   onClear: () => void;
   onSend: () => void;
 }
 
-export function IdentifyPanel({ candidates, pickedNotes, shift, onClear, onSend }: Props) {
+export function IdentifyPanel({ candidates, notes, canClear, shift, onClear, onSend }: Props) {
   const top = candidates[0];
   const rest = candidates.slice(1);
-  const distinct = new Set(pickedNotes.map((note) => note.pc)).size;
+  const distinct = new Set(notes.map((note) => note.pc)).size;
   const detail = top ? candidateDetail(top) : '';
 
   return (
@@ -43,11 +44,11 @@ export function IdentifyPanel({ candidates, pickedNotes, shift, onClear, onSend 
             )}
           </>
         ) : (
-          <span className="muted">{distinct < 2 ? 'Pick two or more notes' : 'No match'}</span>
+          <span className="muted">{distinct < 2 ? 'Play or pick two or more notes' : 'No match'}</span>
         )}
       </div>
       <div className="identify-actions">
-        <button type="button" className="btn-mini" onClick={onClear} disabled={pickedNotes.length === 0}>
+        <button type="button" className="btn-mini" onClick={onClear} disabled={!canClear}>
           Clear
         </button>
         <button type="button" className="btn-mini" onClick={onSend} disabled={!top}>
@@ -58,11 +59,11 @@ export function IdentifyPanel({ candidates, pickedNotes, shift, onClear, onSend 
           className="btn-mini"
           onClick={() =>
             player.playChord(
-              pickedNotes.map((note) => note.midi),
+              notes.map((note) => note.midi),
               { durationMs: 1200 },
             )
           }
-          disabled={pickedNotes.length === 0}
+          disabled={notes.length === 0}
         >
           Play
         </button>
