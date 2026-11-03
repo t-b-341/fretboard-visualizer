@@ -120,15 +120,19 @@ export function StepsStrip({
         Next: {nextText}
       </p>
       <div className="step-actions">
-        <button type="button" onClick={() => onToggleLock(currentStep)} disabled={!current}>
-          {locked ? 'Unlock this step' : 'Lock this step'}
-        </button>
-        <button type="button" onClick={() => onReroll(currentStep)} disabled={!current}>
-          Reroll this step
-        </button>
-        <button type="button" onClick={() => onRemove(currentStep)} disabled={!current}>
-          Remove
-        </button>
+        {current && (
+          <>
+            <button type="button" onClick={() => onToggleLock(currentStep)}>
+              {locked ? 'Unlock this step' : 'Lock this step'}
+            </button>
+            <button type="button" onClick={() => onReroll(currentStep)}>
+              Reroll this step
+            </button>
+            <button type="button" onClick={() => onRemove(currentStep)}>
+              Remove
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

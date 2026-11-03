@@ -1,11 +1,7 @@
 // A keyboard window: a run of MIDI notes starting on C.
 //
 // The on-screen keyboard draws this window. A 37-key controller is the
-// three-octave case (C to C, inclusive). The guide is the subset of those
-// keys the current scale / chord highlighting would draw — the same list a
-// later hardware light-guide can send.
-
-import type { NoteHighlight } from './highlight';
+// three-octave case (C to C, inclusive).
 
 /** Three octaves from C to C. The key count of a 37-key controller. */
 export const CONTROLLER_KEY_COUNT = 37;
@@ -20,13 +16,6 @@ export interface KeyWindow {
   lowest: number;
   /** Number of keys, including the top note. */
   keyCount: number;
-}
-
-export interface GuideNote {
-  midi: number;
-  /** Pitch class 0–11. */
-  pc: number;
-  highlight: NoteHighlight;
 }
 
 /** MIDI number of C in the app's octave numbering (octave 4 → 60). */
@@ -66,20 +55,4 @@ export function controllerWindow(baseOctave: number, octaveShift: number): KeyWi
 export function keyboardWindow(octaves: number, lowestCMidi: number): KeyWindow {
   const oct = Math.max(1, Math.round(octaves));
   return { lowest: lowestCMidi, keyCount: 12 * oct + 1 };
-}
-
-/** Keys in the window that the current highlighting would draw, low to high. */
-export function guideForWindow(
-  evaluate: (pc: number) => NoteHighlight | null,
-  range: KeyWindow,
-): GuideNote[] {
-  const notes: GuideNote[] = [];
-  const top = range.lowest + range.keyCount;
-  for (let midi = range.lowest; midi < top; midi++) {
-    if (midi < 0 || midi > 127) continue;
-    const pc = midi % 12;
-    const highlight = evaluate(pc);
-    if (highlight) notes.push({ midi, pc, highlight });
-  }
-  return notes;
 }

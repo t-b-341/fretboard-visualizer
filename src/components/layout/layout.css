@@ -127,12 +127,16 @@
   margin-top: 8px;
 }
 
-.compare-panel summary {
+.compare-panel summary,
+.suggest-panel summary,
+[data-testid='scale-positions'] summary {
   cursor: pointer;
   list-style: none;
 }
 
-.compare-panel summary::-webkit-details-marker {
+.compare-panel summary::-webkit-details-marker,
+.suggest-panel summary::-webkit-details-marker,
+[data-testid='scale-positions'] summary::-webkit-details-marker {
   display: none;
 }
 
@@ -147,10 +151,6 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
-}
-
-.panel-slot {
-  min-height: 1px;
 }
 
 .key-fields {
@@ -970,7 +970,6 @@
   min-height: 36px;
 }
 
-.scale-positions-gap,
 [data-testid='scale-positions'] .segmented,
 [data-testid='scale-positions'] .field,
 [data-testid='scale-positions'] .check-line {

@@ -98,6 +98,12 @@ describe('spellingMap', () => {
     expect(spelling.get(0)).toBe('C');
   });
 
+  it('spells a concert D major chord as Eb G Bb when Standard names sit in a sharp key', () => {
+    const chord = buildChord(2, 'maj');
+    const { spelling } = spellingMap(11, [0, 2, 4, 5, 7, 9, 11], chord, 1);
+    expect([2, 6, 9].map((pc) => spelling.get((pc + 1) % 12)).join(' ')).toBe('Eb G Bb');
+  });
+
   it('leaves non-heptatonic scales without letter spellings', () => {
     const { scaleSpelling, spelling } = spellingMap(0, [0, 2, 4, 7, 9], null, 0);
     expect(scaleSpelling).toBeNull();

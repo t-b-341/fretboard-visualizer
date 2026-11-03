@@ -27,8 +27,10 @@ export function ScalePositions({
   const index = shapes.length === 0 ? 0 : Math.min(positionIndex, shapes.length - 1);
 
   return (
-    <section data-testid="scale-positions">
-      <h2>Positions</h2>
+    <details data-testid="scale-positions">
+      <summary>
+        <h2>Positions</h2>
+      </summary>
       <div className="segmented" role="group" aria-label="Position box">
         <button type="button" className={positions === 'all' ? 'active' : ''} onClick={() => onPositions('all')}>
           All
@@ -66,6 +68,7 @@ export function ScalePositions({
         />
         Fret range
       </label>
+      {fretRange.enabled && (
       <div className="row">
         <div className="field">
           <label htmlFor="fret-range-from">From</label>
@@ -99,6 +102,7 @@ export function ScalePositions({
           />
         </div>
       </div>
-    </section>
+      )}
+    </details>
   );
 }

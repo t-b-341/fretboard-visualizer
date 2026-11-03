@@ -15,10 +15,6 @@ export function modeIntervals(familyKey: FamilyKey, modeKey: string): number[] {
   return mode.intervals;
 }
 
-export function newStepId(): string {
-  return `step-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 /** Template or generator output. Locked steps are applied afterwards. */
 export function suggestChords(
   ctx: KeyContext,

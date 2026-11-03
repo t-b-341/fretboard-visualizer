@@ -11,8 +11,10 @@ export function SuggestPanel({ onSuggest }: { onSuggest: (style: SuggestStyle, b
   const [style, setStyle] = useState<SuggestStyle>('jazz');
   const [borrowed, setBorrowed] = useState(false);
   return (
-    <section data-testid="suggest-panel">
-      <h2>Suggest</h2>
+    <details className="suggest-panel" data-testid="suggest-panel">
+      <summary>
+        <h2>Suggest</h2>
+      </summary>
       <label className="field">
         Style
         <select value={style} onChange={(event) => setStyle(event.target.value as SuggestStyle)}>
@@ -30,6 +32,6 @@ export function SuggestPanel({ onSuggest }: { onSuggest: (style: SuggestStyle, b
       <button type="button" className="panel-button suggest-go" onClick={() => onSuggest(style, borrowed)}>
         Suggest
       </button>
-    </section>
+    </details>
   );
 }

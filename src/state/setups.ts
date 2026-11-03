@@ -1,12 +1,10 @@
-// Named setups and the last session, kept in localStorage so the portable
-// HTML file can reopen on the same key, tuning, view, and progression.
-// Note-quiz settings, the MIDI input port name, and the played-note toggles
-// travel inside the app blob. mergeApp fills them in when an older setup has
-// none, and a saved port that is not connected falls back to none.
+// Read the v1 localStorage document. v2 writes its own key; this reader stays
+// so the old blob can still be parsed. mergeApp fills fields an older setup
+// never stored.
 
 const KEY = 'fretboard-visualizer:setups:v1';
 
-export interface NamedSetup {
+interface NamedSetup {
   id: string;
   name: string;
   savedAt: number;
@@ -39,42 +37,6 @@ function read(): Store {
   }
 }
 
-function write(store: Store) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(store));
-  } catch {
-    /* private mode or a full disk — the session simply isn't remembered */
-  }
-}
-
 export function loadStore(): Store {
   return read();
-}
-
-export function saveLast(app: unknown, progression: unknown) {
-  const store = read();
-  store.last = { app, progression };
-  write(store);
-}
-
-export function saveNamed(name: string, app: unknown, progression: unknown): NamedSetup[] {
-  const store = read();
-  const setup: NamedSetup = {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}`,
-    name: name.trim().slice(0, 40),
-    savedAt: Date.now(),
-    app,
-    progression,
-  };
-  store.named = [setup, ...store.named].slice(0, 24);
-  write(store);
-  return store.named;
-}
-
-export function deleteNamed(id: string): NamedSetup[] {
-  const store = read();
-  store.named = store.named.filter((s) => s.id !== id);
-  write(store);
-  return store.named;
 }

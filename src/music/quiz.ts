@@ -126,9 +126,6 @@ export const QUIZ_LOG_LIMIT = 2000;
 /** Quality names for 0..12 semitones. 0 is unused by the quiz. */
 export const INTERVAL_NAMES = ['P1', 'm2', 'M2', 'm3', 'M3', 'P4', 'A4', 'P5', 'm6', 'M6', 'm7', 'M7', 'P8'] as const;
 
-/** Degree names for a click-the-note prompt. Index 12 is the octave. */
-export const INTERVAL_DEGREES = ['1', 'b2', '2', 'b3', '3', '4', 'b5', '5', 'b6', '6', 'b7', '7', '8'] as const;
-
 const INTERVAL_ALIAS: Record<string, string> = {
   tt: 'A4',
   tritone: 'A4',

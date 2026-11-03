@@ -34,19 +34,13 @@ import { notesPerString } from './music/shapes';
 import type { NoteQuizSettings } from './music/quiz';
 import { chordWrittenNotes } from './music/staff';
 import { formatTab } from './music/tab';
-import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
-import { createInitialState, defaultProgression } from './state/appState';
-import type { AppState, ColorMode, ProgressionSnapshot } from './state/appState';
+import { defaultProgression, type ProgressionSnapshot } from './state/appState';
 import { deriveView } from './state/derive';
 import { toLegacy } from './state/v2/adapter';
 import { clampKeyboardLowest } from './state/v2/keyboardSpan';
 import { useAppV2 } from './state/v2/useAppV2';
 import type { Step } from './state/v2/types';
 import { chooseVoicings } from './state/v2/voicingChoice';
-
-export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
-export type { AppState, ColorMode };
-export { createInitialState };
 
 function useTab(): 'workspace' | 'practice' {
   const read = () => (window.location.hash === '#practice' ? 'practice' : 'workspace');
@@ -591,6 +585,7 @@ export default function App() {
                     <button
                       type="button"
                       role="radio"
+                      aria-label="Concert pitch"
                       aria-checked={state.view.staffPitch !== 'guitar'}
                       className={state.view.staffPitch === 'guitar' ? undefined : 'active'}
                       onClick={() => setView({ staffPitch: 'concert' })}
@@ -600,6 +595,7 @@ export default function App() {
                     <button
                       type="button"
                       role="radio"
+                      aria-label="Written pitch"
                       aria-checked={state.view.staffPitch === 'guitar'}
                       className={state.view.staffPitch === 'guitar' ? 'active' : undefined}
                       onClick={() => setView({ staffPitch: 'guitar' })}

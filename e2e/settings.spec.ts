@@ -93,6 +93,7 @@ test('scale positions and the fret range show only for Scale, and dim notes outs
   await openApp(page);
   const positions = page.getByTestId('scale-positions');
   await expect(positions).toBeVisible();
+  await positions.locator('summary').click();
   await expect(positions.getByRole('button', { name: 'All', exact: true })).toBeVisible();
   await expect(positions.getByRole('button', { name: '3 per string', exact: true })).toBeVisible();
   await expect(positions.getByRole('button', { name: 'CAGED', exact: true })).toBeVisible();

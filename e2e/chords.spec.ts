@@ -51,6 +51,7 @@ test('Suggest keeps a locked step and Reroll changes only the current one', asyn
   await chips.nth(1).click();
   await page.getByRole('button', { name: 'Lock this step' }).click();
   await expect(chips.nth(1)).toHaveAttribute('data-locked', 'true');
+  await page.getByTestId('suggest-panel').locator('summary').click();
   await page.getByRole('button', { name: 'Suggest', exact: true }).click();
   await expect(page.getByTestId('step-chip').nth(1).locator('.step-symbol')).toHaveText(lockedSymbol);
 

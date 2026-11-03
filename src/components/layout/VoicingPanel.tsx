@@ -75,6 +75,7 @@ export function VoicingPanel({
           </option>
         ))}
       </select>
+      {count > 0 && (
       <div className="voicing-stepper" role="group" aria-label="Which voicing">
         <button
           type="button"
@@ -96,6 +97,7 @@ export function VoicingPanel({
           ›
         </button>
       </div>
+      )}
       {fellBack && (
         <p className="voicing-note">Drop-2 needs four notes, so this chord uses a close voicing.</p>
       )}
