@@ -90,14 +90,16 @@ describe('reduceApp', () => {
     expect(reduceApp(createDefaultV2(), { type: 'nextStep' }).material.currentStep).toBe(0);
   });
 
-  it('keeps practice question types the quiz does not edit', () => {
+  it('saves every practice question type', () => {
     const state = createDefaultV2();
-    state.practice.questionTypes.chordTones = true;
     const settings = defaultNoteQuizSettings(7, 24);
     settings.types.nameNote = false;
+    settings.types.chordTone = true;
+    settings.types.readStaff = true;
     settings.keyContext = 'key';
     const next = reduceApp(state, { type: 'setNoteQuiz', settings });
     expect(next.practice.questionTypes.chordTones).toBe(true);
+    expect(next.practice.questionTypes.readStaff).toBe(true);
     expect(next.practice.questionTypes.nameNote).toBe(false);
     expect(next.practice.spelling).toBe('key');
   });

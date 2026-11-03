@@ -43,11 +43,12 @@ Settings drawer (slides in from the right):
 - MIDI: output device and channel; input device; show played notes; sound played notes.
 - Voice leading (advanced): the cost sliders and Reset.
 
-Practice tab: one quiz. Reference views are hidden while a question is open.
+Practice tab: one quiz. The neck card, the question card, and a settings column. Reference views are hidden while a question is open. The staff card appears only for a Read from the staff question. The keyboard card stays hidden. The workspace's lit notes never show while a question is open; correct cells appear only as feedback after answering.
 - Question types: Name the note, Find every note, Intervals from a root (both directions), Ear intervals, Chord tones (the old Quiz view), Read from the staff.
 - Where: strings, fret range. Spelling: either spelling, or spell in the current key.
 - Session bar: answered, accuracy, median time; Heatmap toggle.
-- MIDI input can answer name and reverse-interval questions.
+- MIDI input can answer name, read-staff, and reverse-interval questions.
+- The open tab is the URL hash (`#practice` or `#workspace`), so a reload stays on Practice. Practice settings are part of the saved setup.
 
 ## Rules
 - One control per job. No duplicates.

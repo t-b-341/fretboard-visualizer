@@ -62,6 +62,8 @@ interface Props {
    * Null leaves the measure alone.
    */
   identify?: { midis: readonly number[]; symbol: string } | null;
+  /** One note, spelled in the key. Omits the scale, the chord, and every other note. */
+  singleNote?: number | null;
 }
 
 const STEP = 6;
@@ -328,6 +330,7 @@ export function GrandStaff(props: Props) {
     dimRest = false,
     soundingDegree = null,
     identify = null,
+    singleNote = null,
   } = props;
 
   const narrow = useNarrowScreen();
@@ -343,7 +346,26 @@ export function GrandStaff(props: Props) {
     writtenStaff,
   };
 
-  const drawn: DrawnMeasure[] = stepped
+  const drawn: DrawnMeasure[] =
+    typeof singleNote === 'number'
+      ? [
+          {
+            index: 0,
+            symbol: '',
+            current: true,
+            layout: staffLayoutFor({
+              viewMode: 'identify',
+              rootPc,
+              intervals,
+              chord: null,
+              voicingMidis: null,
+              pickedMidis: [singleNote],
+              guitarWritten,
+              writtenStaff,
+            }),
+          },
+        ]
+      : stepped
     ? measures.map((measure, index) => {
         const current = index === Math.min(Math.max(currentMeasure, 0), measures.length - 1);
         const picked = identifying && current;

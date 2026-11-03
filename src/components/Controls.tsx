@@ -566,22 +566,6 @@ export function Controls(props: Props) {
             >
               Chords
             </button>
-            <button
-              className={state.viewMode === 'quiz' ? 'active' : ''}
-              onClick={() => onUpdate({ viewMode: 'quiz' })}
-            >
-              Quiz
-            </button>
-          </div>
-          <div className="segmented" role="group" aria-label="Note quiz">
-            <button
-              type="button"
-              className={state.noteQuiz.enabled ? 'active' : ''}
-              aria-pressed={state.noteQuiz.enabled}
-              onClick={() => onUpdate({ noteQuiz: { ...state.noteQuiz, enabled: !state.noteQuiz.enabled } })}
-            >
-              Note quiz
-            </button>
           </div>
           </div>
         </div>

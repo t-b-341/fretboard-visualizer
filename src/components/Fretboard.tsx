@@ -321,18 +321,19 @@ export function Fretboard(props: Props) {
             />
           ))}
 
-          {visible.map((si) => (
-            <text
-              key={`t-${si}`}
-              className="tuning-label"
-              x={X(LEFT_LABEL_X)}
-              y={stringY(si)}
-              textAnchor={leftHanded ? 'end' : 'start'}
-              dominantBaseline="central"
-            >
-              {noteName(mod(tuning[si].pc + shift, 12))}
-            </text>
-          ))}
+          {!practice &&
+            visible.map((si) => (
+              <text
+                key={`t-${si}`}
+                className="tuning-label"
+                x={X(LEFT_LABEL_X)}
+                y={stringY(si)}
+                textAnchor={leftHanded ? 'end' : 'start'}
+                dominantBaseline="central"
+              >
+                {noteName(mod(tuning[si].pc + shift, 12))}
+              </text>
+            ))}
 
           {fretNums.map((f) => (
             <text key={`fn-${f}`} className="fret-number" x={X(noteX(f))} y={height - 16} textAnchor="middle">

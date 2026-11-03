@@ -362,6 +362,8 @@ function readNoteQuiz(v: unknown, numStrings: number, fretCount: number): NoteQu
         findNote: flag('findNote'),
         intervalFromRoot: flag('intervalFromRoot'),
         earInterval: flag('earInterval'),
+        chordTone: flag('chordTone'),
+        readStaff: flag('readStaff'),
       },
       harmonic: v.harmonic === true,
     },

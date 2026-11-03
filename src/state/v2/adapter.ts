@@ -54,6 +54,8 @@ function noteQuizOf(state: AppStateV2): NoteQuizSettings {
       findNote: practice.questionTypes.findNote,
       intervalFromRoot: practice.questionTypes.intervalFromRoot,
       earInterval: practice.questionTypes.earInterval,
+      chordTone: practice.questionTypes.chordTones,
+      readStaff: practice.questionTypes.readStaff,
     },
     harmonic: false,
   };

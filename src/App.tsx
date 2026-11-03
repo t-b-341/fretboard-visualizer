@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import './components/layout/layout.css';
-import { useHeldNotes } from './audio/midiIn';
+import { midiEngine } from './audio/midi';
+import { midiInput, useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
 import { progressionToSmf } from './audio/midi';
 import { scaleUpAndDown, useTransportPlayback } from './audio/useTransport';
@@ -13,7 +14,6 @@ import type { KeyPick, NeckPick } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { AppHeader } from './components/layout/AppHeader';
 import { MaterialPanel } from './components/layout/MaterialPanel';
-import { PracticeTab } from './components/layout/PracticeTab';
 import { SettingsDrawer } from './components/layout/SettingsDrawer';
 import { StepsStrip } from './components/layout/StepsStrip';
 import { ViewBar } from './components/layout/ViewBar';
@@ -72,7 +72,6 @@ export default function App() {
   const settingsRef = useRef<HTMLButtonElement>(null);
   const [referenceOn, setReferenceOn] = useState(false);
   const [referencePc, setReferencePc] = useState<number | null>(null);
-  const [quizExtras, setQuizExtras] = useState({ naturalsOnly: false, harmonic: false });
 
   const legacy = useMemo(() => ({ ...toLegacy(state), guideTones: false }), [state]);
   const session = useMemo<ProgressionSnapshot>(
@@ -163,10 +162,8 @@ export default function App() {
     () => ({
       ...legacy.noteQuiz,
       enabled: tab === 'practice',
-      naturalsOnly: quizExtras.naturalsOnly,
-      harmonic: quizExtras.harmonic,
     }),
-    [legacy, tab, quizExtras],
+    [legacy, tab],
   );
   const noteQuiz = useNoteQuiz({
     enabled: tab === 'practice',
@@ -191,11 +188,26 @@ export default function App() {
   };
   const onQuizSettings = useCallback(
     (settings: NoteQuizSettings) => {
-      setQuizExtras({ naturalsOnly: settings.naturalsOnly, harmonic: settings.harmonic });
       setNoteQuiz(settings);
     },
     [setNoteQuiz],
   );
+
+  const midiInputName = state.settings.midi.inputName;
+  useEffect(() => {
+    midiInput.selectByName(midiInputName);
+  }, [midiInputName]);
+  useEffect(() => {
+    if (!midiInputName || !midiEngine.supported || midiEngine.enabled) return;
+    let cancel = false;
+    void (async () => {
+      const ok = await midiEngine.enable();
+      if (!cancel && ok) await midiInput.enable();
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [midiInputName]);
 
   useEffect(() => {
     if (referencePc == null) return;
@@ -696,21 +708,67 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <PracticeTab>
-          <Quiz
-            api={noteQuiz}
-            settings={quizSettings}
-            numStrings={legacy.numStrings}
-            fretCount={legacy.fretCount}
-            neckFrom={legacy.fretFrom}
-            neckTo={fretTo}
-            shift={derived.shift}
-            musicalKey={{ rootPc: legacy.rootPc, intervals: derived.intervals }}
-            stringLabels={legacy.tuning.map((item) => noteName(mod(item.pc + derived.shift, 12)))}
-            keyLabel={`${noteName(mod(legacy.rootPc + derived.shift, 12))} ${derived.mode.name}`}
-            onSettings={onQuizSettings}
-          />
-        </PracticeTab>
+        <Quiz
+          api={noteQuiz}
+          settings={quizSettings}
+          numStrings={legacy.numStrings}
+          fretCount={legacy.fretCount}
+          shift={derived.shift}
+          musicalKey={{ rootPc: legacy.rootPc, intervals: derived.intervals }}
+          stringLabels={legacy.tuning.map((item) => noteName(mod(item.pc + derived.shift, 12)))}
+          onSettings={onQuizSettings}
+          neck={
+            <ViewCard title="Neck" testId="neck-card">
+              <Fretboard
+                grid={derived.grid}
+                tuning={legacy.tuning}
+                fretCount={legacy.fretCount}
+                fretFrom={quizSettings.fretMin}
+                fretTo={quizSettings.fretMax}
+                hiddenStrings={legacy.tuning.map((_, index) => index).filter((index) => !quizSettings.strings.includes(index))}
+                leftHanded={legacy.leftHanded}
+                onlyCells={null}
+                guideTones={false}
+                viewMode={legacy.viewMode}
+                activeChord={null}
+                shift={derived.shift}
+                compareEnabled={false}
+                colorByDegree={false}
+                clickToHear={false}
+                guidePcs={null}
+                evaluate={derived.evaluateFretboard}
+                onPlay={onPlay}
+                caption={null}
+                practice={noteQuiz.practice}
+                showPlayed={false}
+                playedMidis={held}
+              />
+            </ViewCard>
+          }
+          staff={
+            noteQuiz.question?.type === 'readStaff' && noteQuiz.question.target && !noteQuiz.heatmap ? (
+              <ViewCard title="Staff" testId="staff-card" className="staff-card">
+                <GrandStaff
+                  viewMode="scale"
+                  rootPc={mod(legacy.rootPc + derived.shift, 12)}
+                  intervals={derived.intervals}
+                  chord={null}
+                  voicingMidis={null}
+                  pickedMidis={[]}
+                  guitarWritten={false}
+                  writtenStaff={state.settings.instrument.numStrings === 6 ? 'bass' : 'treble'}
+                  labelMode="concert"
+                  colorByDegree={false}
+                  compareEnabled={false}
+                  clickToHear={false}
+                  evaluate={derived.evaluateFretboard}
+                  onPlay={onPlay}
+                  singleNote={noteQuiz.question.target.midi + derived.shift}
+                />
+              </ViewCard>
+            ) : null
+          }
+        />
       )}
 
       <SettingsDrawer

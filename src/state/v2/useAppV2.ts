@@ -141,6 +141,8 @@ function applyNoteQuiz(state: AppStateV2, settings: NoteQuizSettings): AppStateV
       findNote: types.findNote,
       intervalFromRoot: types.intervalFromRoot,
       earInterval: types.earInterval,
+      chordTones: types.chordTone,
+      readStaff: types.readStaff,
     },
   };
   if (
@@ -152,7 +154,9 @@ function applyNoteQuiz(state: AppStateV2, settings: NoteQuizSettings): AppStateV
     next.questionTypes.nameNote === practice.questionTypes.nameNote &&
     next.questionTypes.findNote === practice.questionTypes.findNote &&
     next.questionTypes.intervalFromRoot === practice.questionTypes.intervalFromRoot &&
-    next.questionTypes.earInterval === practice.questionTypes.earInterval
+    next.questionTypes.earInterval === practice.questionTypes.earInterval &&
+    next.questionTypes.chordTones === practice.questionTypes.chordTones &&
+    next.questionTypes.readStaff === practice.questionTypes.readStaff
   ) {
     return state;
   }

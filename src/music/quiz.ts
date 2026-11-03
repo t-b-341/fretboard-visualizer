@@ -45,7 +45,13 @@ export function makeQuestion(
 // the answer log, and the scheduler are pure. React and localStorage stay outside
 // except for the two storage helpers, which swallow failures.
 
-export type NoteQuizKind = 'nameNote' | 'findNote' | 'intervalFromRoot' | 'earInterval';
+export type NoteQuizKind =
+  | 'nameNote'
+  | 'findNote'
+  | 'intervalFromRoot'
+  | 'earInterval'
+  | 'chordTone'
+  | 'readStaff';
 
 /** Log rows distinguish the click-the-interval variant from naming one. */
 export type QuizLogType = NoteQuizKind | 'intervalReverse';
@@ -132,7 +138,15 @@ const INTERVAL_ALIAS: Record<string, string> = {
 };
 
 const NATURAL_PCS = new Set(NATURAL);
-const LOG_TYPES = new Set<QuizLogType>(['nameNote', 'findNote', 'intervalFromRoot', 'intervalReverse', 'earInterval']);
+const LOG_TYPES = new Set<QuizLogType>([
+  'nameNote',
+  'findNote',
+  'intervalFromRoot',
+  'intervalReverse',
+  'earInterval',
+  'chordTone',
+  'readStaff',
+]);
 const BOX_WEIGHT = [12, 8, 5, 3, 2, 1];
 const RECENT = 5;
 
@@ -145,7 +159,14 @@ export function defaultNoteQuizSettings(numStrings: number, fretCount: number): 
     fretMax: Math.min(12, frets),
     naturalsOnly: false,
     keyContext: 'none',
-    types: { nameNote: true, findNote: true, intervalFromRoot: true, earInterval: true },
+    types: {
+      nameNote: true,
+      findNote: true,
+      intervalFromRoot: true,
+      earInterval: true,
+      chordTone: false,
+      readStaff: false,
+    },
     harmonic: false,
   };
 }
@@ -333,13 +354,74 @@ export function gradeAnswer(
     };
   }
 
+  if (question.type === 'chordTone') {
+    return gradeOneCell(question, answer, pool, shift, key, type, labels);
+  }
+
+  if (question.type === 'readStaff' && question.target) {
+    const named = (answer.name ?? '').trim();
+    if (!named && (answer.cells?.length ?? 0) > 0) {
+      return gradeOneCell(question, answer, pool, shift, key, type, labels);
+    }
+    const cell = question.target;
+    const shownPc = mod(cell.pc + shift, 12);
+    const required = key ? spelledName(cell.midi, shift, key) : null;
+    const correct = nameAccepted(named, shownPc, required);
+    const shown = question.answerText;
+    for (const item of question.answerCells) labels[cellKey(item)] = shown;
+    labels[cellKey(cell)] = shown;
+    return {
+      correct,
+      precision: correct ? 1 : 0,
+      recall: correct ? 1 : 0,
+      right: correct ? question.answerCells : [],
+      wrong: correct ? [] : [cell],
+      labels,
+      entries: [entryFor(type, cell, correct)],
+    };
+  }
+
   return { correct: false, precision: 0, recall: 0, right: [], wrong: [], labels, entries: [] };
 }
 
+/** One clicked cell is right when it is one of the answer cells. */
+function gradeOneCell(
+  question: NoteQuizQuestion,
+  answer: { name?: string; cells?: CellRef[] },
+  pool: readonly Cell[],
+  shift: number,
+  key: QuizKey | null,
+  type: QuizLogType,
+  labels: Record<string, string>,
+): GradeResult {
+  const expected = question.answerCells;
+  const expectedIds = new Set(expected.map(cellKey));
+  const picked = uniqueCells(answer.cells ?? [], pool).slice(0, 1);
+  const hit = picked.filter((cell) => expectedIds.has(cellKey(cell)));
+  const extras = picked.filter((cell) => !expectedIds.has(cellKey(cell)));
+  const correct = hit.length === 1;
+  const mark = question.answerText;
+  for (const cell of expected) labels[cellKey(cell)] = mark;
+  for (const cell of extras) labels[cellKey(cell)] = nameOfCell(cell, shift, key);
+  return {
+    correct,
+    precision: correct ? 1 : 0,
+    recall: correct ? 1 : 0,
+    right: expected,
+    wrong: extras,
+    labels,
+    entries: [
+      ...hit.map((cell) => entryFor(type, cell, true)),
+      ...extras.map((cell) => entryFor(type, cell, false)),
+    ],
+  };
+}
+
 /**
- * A played MIDI note answers "name this note" and the reverse-interval
- * question by pitch class (any octave). Other question types stay on the
- * pad and the fretboard. Returns null when this note does not answer.
+ * A played MIDI note answers "name this note", "read the staff", and the
+ * reverse-interval question by pitch class (any octave). Other question
+ * types stay on the pad and the fretboard. Returns null when this note
+ * does not answer.
  */
 export function gradePlayedNote(
   question: NoteQuizQuestion,
@@ -351,8 +433,8 @@ export function gradePlayedNote(
   if (!Number.isInteger(midi) || midi < 0 || midi > 127) return null;
   const pc = mod(midi, 12);
 
-  if (question.type === 'nameNote' && question.target) {
-    const spelled = spelledName(question.target.midi, shift, key);
+  if ((question.type === 'nameNote' || question.type === 'readStaff') && question.target) {
+    const spelled = question.type === 'readStaff' && !key ? question.answerText : spelledName(question.target.midi, shift, key);
     const match = mod(question.target.pc, 12) === pc;
     return gradeAnswer(question, { name: match ? spelled : '' }, pool, shift, key);
   }
@@ -452,6 +534,8 @@ export function scheduleNoteQuestion(input: ScheduleInput): NoteQuizQuestion | n
   if (settings.types.findNote) types.push('findNote');
   if (settings.types.intervalFromRoot) types.push('intervalFromRoot', 'intervalReverse');
   if (settings.types.earInterval) types.push('earInterval');
+  if (settings.types.chordTone) types.push('chordTone');
+  if (settings.types.readStaff) types.push('readStaff');
   if (types.length === 0) return null;
 
   const stats = statsFromLog(log);
@@ -469,7 +553,25 @@ export function scheduleNoteQuestion(input: ScheduleInput): NoteQuizQuestion | n
   if (candidates.length === 0) return null;
 
   const picked = weightedPick(candidates, rnd);
-  return buildQuestion(picked.type, picked.cell, pool, shift, key, rnd);
+  return buildQuestion(picked.type, picked.cell, pool, shift, key, input.key, rnd);
+}
+
+/** A chord in the current key whose asked tone is this pitch class. */
+function chordForPitch(pc: number, shift: number, musicalKey: QuizKey | null, rnd: () => number): Question {
+  const rootPc = musicalKey?.rootPc ?? 0;
+  const intervals = musicalKey && musicalKey.intervals.length > 0 ? musicalKey.intervals : [0, 2, 4, 5, 7, 9, 11];
+  const want = mod(pc, 12);
+  for (let i = 0; i < 40; i++) {
+    const question = makeQuestion(rnd, rootPc, intervals, shift);
+    if (mod(question.targetPc, 12) === want) return question;
+  }
+  const chord = buildChord(mod(want - 7, 12), 'maj7');
+  return {
+    chord,
+    targetDegree: '5',
+    targetPc: want,
+    prompt: `Find the 5 of ${chordSymbol(chord, shift)}`,
+  };
 }
 
 function buildQuestion(
@@ -478,6 +580,7 @@ function buildQuestion(
   pool: readonly Cell[],
   shift: number,
   key: QuizKey | null,
+  musicalKey: QuizKey | null,
   rnd: () => number,
 ): NoteQuizQuestion | null {
   const nonce = Math.floor(rnd() * 1e9);
@@ -507,22 +610,50 @@ function buildQuestion(
     };
   }
 
+  if (type === 'chordTone') {
+    const made = chordForPitch(cell.pc, shift, musicalKey, rnd);
+    const answerCells = pool.filter((item) => mod(item.pc, 12) === mod(made.targetPc, 12));
+    return {
+      id: `chordTone:${made.targetPc}:${nonce}`,
+      type: 'chordTone',
+      reverse: false,
+      prompt: made.prompt,
+      target: cell,
+      answerCells: answerCells.length > 0 ? answerCells : [cell],
+      answerText: made.targetDegree,
+    };
+  }
+
+  if (type === 'readStaff') {
+    const name = spelledName(cell.midi, shift, musicalKey);
+    const answerCells = pool.filter((item) => mod(item.pc, 12) === mod(cell.pc, 12));
+    return {
+      id: `readStaff:${cell.stringIndex}:${cell.fret}:${nonce}`,
+      type: 'readStaff',
+      reverse: false,
+      prompt: 'Read the note on the staff.',
+      target: cell,
+      answerCells,
+      answerText: name,
+    };
+  }
+
   const roots = rootsBelow(cell, pool);
   if (roots.length === 0) return null;
   const root = roots[Math.floor(rnd() * roots.length)];
   const semitones = cell.midi - root.midi;
   if (type === 'intervalReverse') {
-    const degree = INTERVAL_DEGREES[semitones] ?? String(semitones);
+    const interval = INTERVAL_NAMES[semitones] ?? String(semitones);
     const answerCells = pool.filter((item) => item.midi === root.midi + semitones);
     return {
       id: `intervalReverse:${cell.stringIndex}:${cell.fret}:${nonce}`,
       type: 'intervalFromRoot',
       reverse: true,
-      prompt: `Click the ${degree} above this root`,
+      prompt: `Click the ${interval} above this root`,
       root,
       target: cell,
       answerCells,
-      answerText: degree,
+      answerText: interval,
       semitones,
     };
   }
