@@ -135,14 +135,22 @@ const MAJOR_REF = [0, 2, 4, 5, 7, 9, 11];
  * Other sizes are spelled from the interval itself ("1", "b3", "5", "6"), because
  * there is no generic 4th or 7th slot to alter.
  */
+/**
+ * Degree label for one generic interval. `degreeIndex` is the letter count
+ * (0 = unison, 6 = seventh). The accidental is the distance from the major
+ * or perfect size, so a tritone can read as #4 or b5.
+ */
+export function spelledDegreeLabel(degreeIndex: number, semitones: number): string {
+  const diff = semitones - MAJOR_REF[degreeIndex];
+  const acc = diff === 0 ? '' : diff < 0 ? 'b'.repeat(-diff) : '#'.repeat(diff);
+  return `${acc}${degreeIndex + 1}`;
+}
+
 export function scaleDegreeLabel(intervals: number[], index: number): string {
   const semi = intervals[index];
   if (semi === undefined) return '';
   if (intervals.length !== 7 || index > 6) return chromaticDegreeLabel(semi);
-  const degreeNumber = index + 1; // 1..7
-  const diff = semi - MAJOR_REF[index];
-  const acc = diff === 0 ? '' : diff < 0 ? 'b'.repeat(-diff) : '#'.repeat(diff);
-  return `${acc}${degreeNumber}`;
+  return spelledDegreeLabel(index, semi);
 }
 
 /** Degree spelling of a scale, one label per tone, in ascending order. */

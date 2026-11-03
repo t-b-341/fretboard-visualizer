@@ -8,6 +8,7 @@ import {
   appendQuizLog,
   defaultNoteQuizSettings,
   gradeAnswer,
+  gradePlayedNote,
   loadQuizLog,
   makeQuestion,
   median,
@@ -203,6 +204,39 @@ describe('note quiz grading', () => {
     expect(missed.correct).toBe(false);
     expect(missed.wrong).toEqual([root]);
     expect(missed.right).toEqual(reverse.answerCells);
+  });
+
+  it('answers nameNote and the reverse interval from a played pitch class', () => {
+    const question = nameQuestion(eb, 'Eb');
+    expect(gradePlayedNote(question, 51, [eb], 0, null)?.correct).toBe(true);
+    expect(gradePlayedNote(question, 63, [eb], 0, null)?.correct).toBe(true);
+    expect(gradePlayedNote(question, 64, [eb], 0, null)?.correct).toBe(false);
+
+    const key = { rootPc: 10, intervals: aeolian };
+    const spelled = nameQuestion(eb, spelledName(eb.midi, 0, key));
+    expect(gradePlayedNote(spelled, 63, [eb], 0, key)?.correct).toBe(true);
+
+    const root = cell(0, 0, 0, 60);
+    const target = cell(2, 1, 8, 68);
+    const reverse: NoteQuizQuestion = {
+      id: 'rev-played',
+      type: 'intervalFromRoot',
+      reverse: true,
+      prompt: 'Click the b6 above this root',
+      root,
+      target,
+      answerCells: [target],
+      answerText: 'b6',
+      semitones: 8,
+    };
+    expect(gradePlayedNote(reverse, 68, [root, target], 0, null)?.correct).toBe(true);
+    expect(gradePlayedNote(reverse, 56, [root, target], 0, null)?.correct).toBe(true);
+    expect(gradePlayedNote(reverse, 60, [root, target], 0, null)?.correct).toBe(false);
+
+    const find: NoteQuizQuestion = { ...question, type: 'findNote', prompt: 'Find every Eb' };
+    expect(gradePlayedNote(find, 51, [eb], 0, null)).toBeNull();
+    const namedInterval: NoteQuizQuestion = { ...reverse, reverse: false, type: 'intervalFromRoot' };
+    expect(gradePlayedNote(namedInterval, 48, [root, target], 0, null)).toBeNull();
   });
 });
 

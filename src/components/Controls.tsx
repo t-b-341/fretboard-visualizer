@@ -61,6 +61,11 @@ interface Props {
   voicingCount: number;
   voicingIndex: number;
   onPlayVoicing: () => void;
+  /** Interval reference. The pitch itself stays out of saved state. */
+  referenceOn: boolean;
+  referenceName: string | null;
+  onToggleReference: (on: boolean) => void;
+  onClearReference: () => void;
 }
 
 export function Controls(props: Props) {
@@ -86,6 +91,10 @@ export function Controls(props: Props) {
     voicingCount,
     voicingIndex,
     onPlayVoicing,
+    referenceOn,
+    referenceName,
+    onToggleReference,
+    onClearReference,
   } = props;
 
   const controllerRange = controllerWindow(state.controllerBaseOctave, state.controllerOctaveShift);
@@ -737,19 +746,38 @@ export function Controls(props: Props) {
         </div>
         <div className="field">
           <label>Tuning reference</label>
-          <div className="segmented" role="group" aria-label="Label pitch reference">
-            <button
-              className={state.labelMode === 'concert' ? 'active' : ''}
-              onClick={() => onUpdate({ labelMode: 'concert' })}
-            >
-              Concert
-            </button>
-            <button
-              className={state.labelMode === 'standard' ? 'active' : ''}
-              onClick={() => onUpdate({ labelMode: 'standard' })}
-            >
-              Standard
-            </button>
+          <div className="row">
+            <div className="segmented" role="group" aria-label="Label pitch reference">
+              <button
+                className={state.labelMode === 'concert' ? 'active' : ''}
+                onClick={() => onUpdate({ labelMode: 'concert' })}
+              >
+                Concert
+              </button>
+              <button
+                className={state.labelMode === 'standard' ? 'active' : ''}
+                onClick={() => onUpdate({ labelMode: 'standard' })}
+              >
+                Standard
+              </button>
+            </div>
+            <div className="segmented" role="group" aria-label="Interval reference">
+              <button
+                className={referenceOn ? 'active' : ''}
+                aria-pressed={referenceOn}
+                onClick={() => onToggleReference(!referenceOn)}
+              >
+                Reference
+              </button>
+            </div>
+            {referenceName && (
+              <span className="reference-chip">
+                Intervals from {referenceName}
+                <button type="button" className="reference-chip-x" aria-label="Clear reference" onClick={onClearReference}>
+                  ×
+                </button>
+              </span>
+            )}
           </div>
         </div>
         <div className="field">

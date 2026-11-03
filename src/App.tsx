@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { Controls } from './components/Controls';
 import { FormulaBar } from './components/FormulaBar';
@@ -8,12 +8,18 @@ import { IdentifyPanel } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
 import { MidiControls } from './components/MidiControls';
+import { TabExport } from './components/TabExport';
 import { ProgressionControls } from './components/ProgressionControls';
+import type { BuilderSeed } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
 import { QuizPanel } from './components/QuizPanel';
 import { SetupBar } from './components/SetupBar';
+import { useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
+import { chordSymbol } from './music/chords';
+import { heldChordNotes, identifyChord } from './music/identify';
 import { mod, noteName } from './music/notes';
+import { formatTab } from './music/tab';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 import { deriveView } from './state/derive';
 import type { AppState, ColorMode } from './state/appState';
@@ -54,12 +60,27 @@ export default function App() {
     handleComparePreset,
     handleShape,
     nextQuiz,
+    referenceOn,
+    referencePc,
+    toggleReference,
+    chooseReference,
+    clearReference,
   } = useAppState();
 
   const derived = useMemo(
-    () => deriveView(state, session, playbackVoicing),
-    [state, session, playbackVoicing],
+    () => deriveView(state, session, playbackVoicing, referenceOn ? referencePc : null),
+    [state, session, playbackVoicing, referenceOn, referencePc],
   );
+  const held = useHeldNotes();
+  const identifyNotes = useMemo(
+    () => (state.viewMode === 'identify' ? heldChordNotes(derived.pickedNotes, held) : []),
+    [state.viewMode, derived.pickedNotes, held],
+  );
+  const identifyMatches = useMemo(
+    () => (state.viewMode === 'identify' ? identifyChord(identifyNotes) : derived.identifyMatches),
+    [state.viewMode, identifyNotes, derived.identifyMatches],
+  );
+  const [builderSeed, setBuilderSeed] = useState<BuilderSeed | null>(null);
   const noteQuiz = useNoteQuiz({
     enabled: state.noteQuiz.enabled,
     settings: state.noteQuiz,
@@ -69,6 +90,32 @@ export default function App() {
   });
   const showFretboard =
     state.noteQuiz.enabled || state.instrumentView === 'fretboard' || state.instrumentView === 'both';
+  const gripSymbol = state.activeChord ? chordSymbol(state.activeChord, derived.shift) : '';
+  const gripTab = derived.shownVoicing ? (
+    <TabExport
+      text={formatTab(
+        state.tuning,
+        [
+          {
+            label: gripSymbol || undefined,
+            notes: derived.shownVoicing.notes,
+          },
+        ],
+        { labelShift: derived.shift },
+      )}
+      fileName={`fretboard-${gripSymbol.replace(/#/g, 'sharp').replace(/[^\w.-]+/g, '') || 'grip'}-grip.txt`}
+    />
+  ) : null;
+  const answerPlayed = noteQuiz.answerPlayed;
+  const seenHeld = useRef<ReadonlySet<number> | null>(null);
+  useEffect(() => {
+    const prev = seenHeld.current;
+    seenHeld.current = held;
+    if (prev === null) return;
+    for (const midi of held) {
+      if (!prev.has(midi)) answerPlayed(midi);
+    }
+  }, [held, answerPlayed]);
 
   return (
     <div className="app">
@@ -112,6 +159,10 @@ export default function App() {
         onShape={(mode, index) => handleShape(mode, index, derived.npsShapes, derived.cagedShapes)}
         voicingCount={derived.voicingCount}
         voicingIndex={derived.voicingIndex}
+        referenceOn={referenceOn}
+        referenceName={derived.referenceName}
+        onToggleReference={toggleReference}
+        onClearReference={clearReference}
         onPlayVoicing={() => {
           if (!derived.selectedVoicing) return;
           player.playChord(
@@ -131,6 +182,17 @@ export default function App() {
         onDrone={(drone) => update({ drone })}
         clickToHear={state.clickToHear}
         onClickToHear={(clickToHear) => update({ clickToHear })}
+        midiInputName={state.midiInputName}
+        showPlayedNotes={state.showPlayedNotes}
+        soundPlayedNotes={state.soundPlayedNotes}
+        onMidiInputName={(midiInputName) =>
+          update({
+            midiInputName,
+            showPlayedNotes: midiInputName ? true : state.showPlayedNotes,
+          })
+        }
+        onShowPlayedNotes={(showPlayedNotes) => update({ showPlayedNotes })}
+        onSoundPlayedNotes={(soundPlayedNotes) => update({ soundPlayedNotes })}
       />
 
       <ProgressionControls
@@ -139,6 +201,14 @@ export default function App() {
         scalePcs={derived.scalePcs}
         shift={derived.shift}
         tuning={state.tuning}
+        fretCount={state.fretCount}
+        fretFrom={state.fretFrom}
+        fretTo={Math.min(state.fretTo, state.fretCount)}
+        voicingStyle={state.voicingStyle}
+        voicingInversion={state.voicingInversion}
+        voicingWidth={state.voicingWidth}
+        voicingSetStart={state.voicingSetStart}
+        activeGrip={derived.shownVoicing?.notes ?? null}
         active={state.viewMode === 'chord'}
         activeChord={state.activeChord}
         ghostScale={state.ghostScale}
@@ -154,6 +224,9 @@ export default function App() {
         session={session}
         loadId={loadId}
         onSessionChange={onSessionChange}
+        identifyOn={state.viewMode === 'identify'}
+        onToggleIdentify={() => update({ viewMode: state.viewMode === 'identify' ? 'chord' : 'identify' })}
+        builderSeed={builderSeed}
       />
 
       <FormulaBar
@@ -171,6 +244,26 @@ export default function App() {
       />
 
       <div className="instrument-views">
+        {state.viewMode === 'identify' && (
+          <IdentifyPanel
+            candidates={identifyMatches}
+            notes={identifyNotes}
+            canClear={derived.pickedNotes.length > 0}
+            shift={derived.shift}
+            onClear={() => update({ picked: {} })}
+            onSend={() => {
+              const top = derived.identifyMatches[0];
+              const quality = top?.chord.quality;
+              if (!top || !quality) return;
+              setBuilderSeed((seed) => ({
+                token: (seed?.token ?? 0) + 1,
+                rootPc: top.chord.rootPc,
+                quality,
+              }));
+              update({ activeChord: top.chord });
+            }}
+          />
+        )}
         {showFretboard && (
           <Fretboard
             grid={derived.grid}
@@ -199,10 +292,16 @@ export default function App() {
                 : undefined
             }
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
             caption={null}
             practice={noteQuiz.practice}
-          />
+            showPlayed={state.showPlayedNotes}
+            playedMidis={held}
+          >
+            {gripTab}
+          </Fretboard>
         )}
+        {!showFretboard && gripTab && <div className="fretboard-wrap">{gripTab}</div>}
         {state.noteQuiz.enabled && (
           <Quiz
             api={noteQuiz}
@@ -226,14 +325,6 @@ export default function App() {
             onNext={nextQuiz}
           />
         )}
-        {state.viewMode === 'identify' && (
-          <IdentifyPanel
-            identifyMatches={derived.identifyMatches}
-            pickedNotes={derived.pickedNotes}
-            shift={derived.shift}
-            onClear={() => update({ picked: {} })}
-          />
-        )}
         {(state.instrumentView === 'keyboard' || state.instrumentView === 'both') && (
           <Keyboard
             octaves={state.keyboardOctaves}
@@ -245,6 +336,9 @@ export default function App() {
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateKeyboard}
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
+            showPlayed={state.showPlayedNotes}
+            playedMidis={held}
           />
         )}
         {state.showStaff && (
@@ -263,6 +357,7 @@ export default function App() {
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateFretboard}
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
           />
         )}
       </div>

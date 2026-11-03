@@ -15,7 +15,6 @@ import { guideTonePcs } from '../music/guide';
 import { createEvaluator } from '../music/highlight';
 import type { HighlightContext, NoteHighlight } from '../music/highlight';
 import { identifyChord } from '../music/identify';
-import type { ChordMatch } from '../music/identify';
 import { controllerWindow, cMidi } from '../music/keys';
 import { chromaticDegreeLabel, labelShift, mod, noteName } from '../music/notes';
 import { chordReading, nextInProgression, scaleOrigin, scalePulls, shiftChord } from '../music/reading';
@@ -166,12 +165,9 @@ export function deriveVoicings(args: VoicingInputs) {
     if (cell) pickedNotes.push(cell);
   }
   pickedNotes.sort((a, b) => a.midi - b.midi);
-  const identifyMatches: ChordMatch[] =
-    args.viewMode === 'identify' && pickedNotes.length >= 2
-      ? identifyChord(
-          pickedNotes.map((note) => note.pc),
-          pickedNotes[0].pc,
-        ).slice(0, 5)
+  const identifyMatches =
+    args.viewMode === 'identify'
+      ? identifyChord(pickedNotes.map((note) => ({ pc: note.pc, midi: note.midi })))
       : [];
   const activeCells =
     args.viewMode === 'identify'
@@ -337,7 +333,12 @@ function deriveReading(args: {
   };
 }
 
-export function deriveView(state: AppState, session: ProgressionSnapshot, playbackVoicing: Voicing | null) {
+export function deriveView(
+  state: AppState,
+  session: ProgressionSnapshot,
+  playbackVoicing: Voicing | null,
+  referencePc: number | null = null,
+) {
   const { family, mode, intervals } = selectScale(state.familyKey, state.modeKey);
   const { family: compareFamily, mode: compareMode, intervals: compareIntervals } = selectScale(
     state.compareFamilyKey,
@@ -421,7 +422,12 @@ export function deriveView(state: AppState, session: ProgressionSnapshot, playba
     compareRootPc: state.compareRootPc,
     sharedOnly: state.sharedOnly,
     spelling,
+    referencePc,
   };
+  const referenceName =
+    referencePc == null
+      ? null
+      : (spelling.get(mod(referencePc + shift, 12)) ?? noteName(mod(referencePc + shift, 12)));
   const evaluateFretboard = highlightEvaluator({
     ...highlightBase,
     identifyBassMidi: state.viewMode === 'identify' ? voicings.pickedNotes[0]?.midi : undefined,
@@ -458,6 +464,7 @@ export function deriveView(state: AppState, session: ProgressionSnapshot, playba
     keyboardLowestMidi,
     evaluateFretboard,
     evaluateKeyboard,
+    referenceName,
     ...voicings,
     ...reading,
   };

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
 import type { Chord } from '../music/chords';
@@ -62,8 +63,27 @@ interface Props {
   onPick?: (stringIndex: number, fret: number) => void;
   /** Quiz view: answer the tone at this string and fret. */
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
+  /** While interval reference is armed, a click sets or clears that pitch class. */
+  onReference?: (pc: number) => void;
   /** Note quiz. Replaces ordinary highlighting for as long as it is set. */
   practice?: PracticeOverlay | null;
+  /** MIDI notes held from an input, drawn at every position with that exact number. */
+  showPlayed?: boolean;
+  playedMidis?: ReadonlySet<number>;
+  /** Shown above the neck. Used for the tab of a single grip. */
+  children?: ReactNode;
+}
+
+const NO_PLAYED: ReadonlySet<number> = new Set();
+
+function PlayedMark({ x, y, on }: { x: number; y: number; on: boolean }) {
+  if (!on) return null;
+  return (
+    <g className="played-mark">
+      <circle className="note-played-edge" cx={x} cy={y} r={R + 4} />
+      <circle className="note-played" cx={x} cy={y} r={R + 4} />
+    </g>
+  );
 }
 
 const INLAY_SINGLE = [3, 5, 7, 9, 15, 17, 19, 21];
@@ -101,9 +121,13 @@ export function Fretboard(props: Props) {
     activeCells,
     onPick,
     onQuizAnswer,
+    onReference,
     evaluate,
     window: positionWindow,
     practice,
+    showPlayed = false,
+    playedMidis = NO_PLAYED,
+    children,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -199,24 +223,27 @@ export function Fretboard(props: Props) {
 
   const activate = (stringIndex: number, fret: number, midi: number) => {
     if (picking) onPick(stringIndex, fret);
+    onReference?.(mod(midi, 12));
     play(midi);
   };
 
   const answerQuiz = (stringIndex: number, fret: number, pc: number, midi: number) => {
     if (positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max)) return;
     onQuizAnswer?.(stringIndex, fret, pc);
+    onReference?.(mod(midi, 12));
     play(midi);
   };
 
   const noteClass = (fret: number) => {
     const outside =
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
-    return [clickToHear || picking || quizzing ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
+    return [clickToHear || picking || quizzing || onReference ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
 
   return (
     <div className="fretboard-wrap">
       {caption && <div className="board-caption">{caption}</div>}
+      {children}
       {visible.length === 0 ? (
         <p className="board-caption">Show at least one string.</p>
       ) : (
@@ -315,11 +342,12 @@ export function Fretboard(props: Props) {
             row.map((cell) => {
               if (hidden.has(cell.stringIndex)) return null;
               if (cell.fret < from || cell.fret > to) return null;
-              if (allow && !allow.has(`${cell.stringIndex}:${cell.fret}`)) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
+              const played = showPlayed && playedMidis.has(cell.midi);
+              if (allow && !allow.has(cellKey) && !played) return null;
               if (practice) {
                 const mark = practice.marks[cellKey];
-                if (!mark && !practice.heatmap && !practice.listen) return null;
+                if (!mark && !practice.heatmap && !practice.listen && !played) return null;
                 const x = X(noteX(cell.fret));
                 const y = stringY(cell.stringIndex);
                 const label = mark?.label ?? '';
@@ -336,6 +364,7 @@ export function Fretboard(props: Props) {
                       <circle className="note-target" cx={x} cy={y} r={R} />
                     )}
                     {mark?.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                    <PlayedMark x={x} y={y} on={played} />
                     {label && (
                       <text
                         className={label.length > 2 ? 'practice-label practice-label-long' : 'practice-label'}
@@ -363,18 +392,28 @@ export function Fretboard(props: Props) {
                   ? answerQuiz(cell.stringIndex, cell.fret, cell.pc, cell.midi)
                   : activate(cell.stringIndex, cell.fret, cell.midi);
               if (!ev) {
-                if (!picking && !quizzing) return null;
+                if (!picking && !quizzing && !played) return null;
                 return (
                   <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
-                    <circle className="note-target" cx={x} cy={y} r={R} />
+                    {(picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
               }
               if (ev.role === 'ghost') {
                 return (
-                  <g key={key} className={noteClass(cell.fret)} onClick={() => play(cell.midi)}>
+                  <g
+                    key={key}
+                    className={noteClass(cell.fret)}
+                    onClick={() => {
+                      onReference?.(mod(cell.midi, 12));
+                      play(cell.midi);
+                    }}
+                  >
                     <circle className="note-ghost" cx={x} cy={y} r={4.5} />
+                    {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={9} />}
                     {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
               }
@@ -382,8 +421,10 @@ export function Fretboard(props: Props) {
                 <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                  {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={R + 6} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
                   {ev.outside && <circle className="note-outside-ring" cx={x} cy={y} r={R + 3} />}
+                  <PlayedMark x={x} y={y} on={played} />
                   <text
                     className={noteTextClass(ev, degreeColors)}
                     x={x}

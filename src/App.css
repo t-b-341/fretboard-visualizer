@@ -355,6 +355,51 @@ input:focus {
   stroke-width: 2.5;
   pointer-events: none;
 }
+.note-reference-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 4px 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.reference-chip-x {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.reference-chip-x:hover {
+  color: var(--text);
+}
+.played-mark {
+  pointer-events: none;
+}
+.note-played-edge {
+  fill: none;
+  stroke: #141a22;
+  stroke-width: 5;
+  pointer-events: none;
+}
+.note-played {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
 .note-guide-ring {
   fill: none;
   stroke: #ffd36b;
@@ -557,12 +602,36 @@ input:focus {
   border-radius: 12px;
   padding: 10px 14px;
 }
-.identify-matches {
+.identify-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.identify-primary {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+.identify-name {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+.identify-detail {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.identify-alts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 .identify-actions {
   display: flex;
@@ -823,8 +892,12 @@ input:focus {
 .keyboard .note,
 .keyboard .note-ghost,
 .keyboard .note-root-ring,
+.keyboard .note-reference-ring,
 .keyboard .note-guide-ring,
 .keyboard .note-outside-ring,
+.keyboard .note-played,
+.keyboard .note-played-edge,
+.keyboard .played-mark,
 .keyboard .note-label,
 .keyboard .key-dot {
   pointer-events: none;

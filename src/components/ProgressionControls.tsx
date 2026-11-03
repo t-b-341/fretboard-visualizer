@@ -16,10 +16,13 @@ import { chordToMidi, midiEngine, progressionToSmf } from '../audio/midi';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
 import { mod, noteName } from '../music/notes';
+import { formatTab } from '../music/tab';
 import type { GuitarString } from '../music/tunings';
 import { DEFAULT_WEIGHTS, leadProgression } from '../music/voiceLeading';
 import type { Weights } from '../music/voiceLeading';
-import type { Voicing } from '../music/voicings';
+import { findVoicings } from '../music/voicings';
+import type { VoicedNote, Voicing, VoicingStyle } from '../music/voicings';
+import { TabExport } from './TabExport';
 
 interface Props {
   /** Key centre (concert pitch class). */
@@ -32,6 +35,17 @@ interface Props {
   shift: number;
   /** Current guitar tuning. Voice leading places grips on these strings. */
   tuning: GuitarString[];
+  /** Neck length and the frets currently in view. Tab grips stay inside that window. */
+  fretCount: number;
+  fretFrom: number;
+  fretTo: number;
+  /** String set and grip style used when a chord has no grip on the neck. */
+  voicingStyle: VoicingStyle;
+  voicingInversion: number;
+  voicingWidth: 3 | 4;
+  voicingSetStart: number;
+  /** The single grip on the neck for activeChord, when one is shown. */
+  activeGrip: VoicedNote[] | null;
   /** Whether the chord view is currently active (viewMode === 'chord'). */
   active: boolean;
   /** The chord currently shown on the instruments. */
@@ -55,6 +69,17 @@ interface Props {
   session: ProgressionSnapshot;
   loadId: number;
   onSessionChange: (snap: ProgressionSnapshot) => void;
+  /** Identify mode, toggled from the chord builder row. */
+  identifyOn: boolean;
+  onToggleIdentify: () => void;
+  /** When set, the Root and Quality selects load this chord. */
+  builderSeed: BuilderSeed | null;
+}
+
+export interface BuilderSeed {
+  token: number;
+  rootPc: number;
+  quality: ChordQuality;
 }
 
 export interface ProgressionSnapshot {
@@ -83,6 +108,32 @@ const QUALITY_GROUPS = (() => {
 })();
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
+
+/** First playable grip from findVoicings for the neck's string set and style. */
+function firstStringSetGrip(
+  tuning: GuitarString[],
+  chord: Chord,
+  opts: {
+    fretCount: number;
+    fretFrom: number;
+    fretTo: number;
+    voicingStyle: VoicingStyle;
+    voicingInversion: number;
+    voicingWidth: 3 | 4;
+    voicingSetStart: number;
+  },
+): VoicedNote[] {
+  const style = opts.voicingStyle === 'drop2' ? 'drop2' : 'close';
+  const width = style === 'drop2' ? 4 : opts.voicingWidth;
+  if (tuning.length < width) return [];
+  const start = Math.max(0, Math.min(opts.voicingSetStart, tuning.length - width));
+  const inversion = Math.min(Math.max(0, opts.voicingInversion), width - 1);
+  return (
+    findVoicings(tuning, opts.fretCount, chord, style, inversion, start, width).find((grip) =>
+      grip.every((note) => note.fret >= opts.fretFrom && note.fret <= opts.fretTo),
+    ) ?? []
+  );
+}
 
 function chordPaintClass(base: string, painted: ChordClassification | null): string {
   if (!painted) return base;
@@ -133,6 +184,14 @@ export function ProgressionControls(props: Props) {
     scalePcs,
     shift,
     tuning,
+    fretCount,
+    fretFrom,
+    fretTo,
+    voicingStyle,
+    voicingInversion,
+    voicingWidth,
+    voicingSetStart,
+    activeGrip,
     active,
     activeChord,
     ghostScale,
@@ -148,6 +207,9 @@ export function ProgressionControls(props: Props) {
     session,
     loadId,
     onSessionChange,
+    identifyOn,
+    onToggleIdentify,
+    builderSeed,
   } = props;
 
   const [, setTick] = useState(0);
@@ -225,6 +287,12 @@ export function ProgressionControls(props: Props) {
     onShowVoicingRef.current(null);
   }, [progression]);
 
+  useEffect(() => {
+    if (!builderSeed) return;
+    setBuilderRootPc(mod(builderSeed.rootPc, 12));
+    setBuilderQuality(builderSeed.quality);
+  }, [builderSeed]);
+
   // Clean up timers / silence notes on unmount, and stop when leaving chord view.
   useEffect(() => () => stop(), []);
   useEffect(() => {
@@ -270,6 +338,40 @@ export function ProgressionControls(props: Props) {
   }, [progression, tuning, weights, fretRange, allowOpen]);
   const leadRef = useRef(lead);
   leadRef.current = lead;
+  const shownGripIndex = activeGrip && activeChord ? progression.indexOf(activeChord) : -1;
+  const tabText = useMemo(() => {
+    const columns = progression.map((chord, index) => ({
+      label: chordSymbol(chord, shift),
+      notes:
+        index === shownGripIndex && activeGrip
+          ? activeGrip
+          : firstStringSetGrip(tuning, chord, {
+              fretCount,
+              fretFrom,
+              fretTo,
+              voicingStyle,
+              voicingInversion,
+              voicingWidth,
+              voicingSetStart,
+            }),
+    }));
+    return formatTab(tuning, columns, { labelShift: shift });
+  }, [
+    progression,
+    shownGripIndex,
+    activeGrip,
+    shift,
+    tuning,
+    fretCount,
+    fretFrom,
+    fretTo,
+    voicingStyle,
+    voicingInversion,
+    voicingWidth,
+    voicingSetStart,
+  ]);
+  const tabFileName = `fretboard-${noteName(mod(rootPc + shift, 12)).replace(/#/g, 'sharp')}-progression.txt`;
+
   const hear = (chord: Chord, durationMs = 1000) => player.playChord(voice(chord), { durationMs });
   const preview = (chord: Chord) => {
     onShowChord(chord);
@@ -421,6 +523,14 @@ export function ProgressionControls(props: Props) {
         </button>
         <button className="btn-mini" onClick={() => hear(builderChord)} disabled={!soundReady}>
           &#9654; Hear
+        </button>
+        <button
+          type="button"
+          className={identifyOn ? 'btn-mini active' : 'btn-mini'}
+          aria-pressed={identifyOn}
+          onClick={onToggleIdentify}
+        >
+          Identify
         </button>
       </div>
 
@@ -583,6 +693,7 @@ export function ProgressionControls(props: Props) {
           <input type="checkbox" checked={guideTones} onChange={(e) => onGuideTones(e.target.checked)} /> Guide tones
         </label>
       </div>
+      {progression.length > 0 && <TabExport text={tabText} fileName={tabFileName} />}
       {voiceLeading && (
         <details className="vl-weights">
           <summary>Voice leading weights</summary>

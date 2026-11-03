@@ -139,6 +139,20 @@ describe('highlightEvaluator', () => {
     expect(evaluate(0)).toBeNull();
   });
 
+  it('measures labels from a reference pitch on both instruments', () => {
+    const state = { ...createInitialState(), rootPc: 0, viewMode: 'scale' as const };
+    const concert = deriveView(state, defaultProgression(), null, 7);
+    expect(concert.referenceName).toBe('G');
+    expect(concert.evaluateFretboard(5)?.label).toBe('b7');
+    expect(concert.evaluateFretboard(5)?.role).toBe('scale');
+    expect(concert.evaluateKeyboard(11)?.label).toBe('3');
+    expect(concert.evaluateKeyboard(7)?.reference).toBe(true);
+
+    const standard = deriveView({ ...state, labelMode: 'standard' }, defaultProgression(), null, 7);
+    expect(standard.referenceName).toBe('Ab');
+    expect(standard.evaluateFretboard(5)?.label).toBe('b7');
+  });
+
   it('hides pitch classes outside a voicing restriction', () => {
     const evaluate = highlightEvaluator({ ...base, restrictPcs: new Set([0]) });
     expect(evaluate(0)?.role).toBe('root');

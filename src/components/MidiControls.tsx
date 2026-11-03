@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import './MidiControls.css';
 import type { Triad } from '../music/chords';
 import { midiEngine, scaleToMidi, triadToMidi } from '../audio/midi';
+import { midiInput } from '../audio/midiIn';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
 
@@ -15,6 +16,12 @@ interface Props {
   onDrone: (on: boolean) => void;
   clickToHear: boolean;
   onClickToHear: (on: boolean) => void;
+  midiInputName: string;
+  showPlayedNotes: boolean;
+  soundPlayedNotes: boolean;
+  onMidiInputName: (name: string) => void;
+  onShowPlayedNotes: (on: boolean) => void;
+  onSoundPlayedNotes: (on: boolean) => void;
 }
 
 type Status = 'idle' | 'enabling' | 'ready' | 'unsupported' | 'denied';
@@ -29,6 +36,12 @@ export function MidiControls({
   onDrone,
   clickToHear,
   onClickToHear,
+  midiInputName,
+  showPlayedNotes,
+  soundPlayedNotes,
+  onMidiInputName,
+  onShowPlayedNotes,
+  onSoundPlayedNotes,
 }: Props) {
   const [, setTick] = useState(0);
   const [status, setStatus] = useState<Status>(midiEngine.enabled ? 'ready' : 'idle');
@@ -46,9 +59,35 @@ export function MidiControls({
 
   // Re-render when the MIDI device list / selection or synth settings change.
   useEffect(() => midiEngine.subscribe(() => setTick((t) => t + 1)), []);
+  useEffect(() => midiInput.subscribe(() => setTick((t) => t + 1)), []);
   useEffect(() => synth.subscribe(() => setTick((t) => t + 1)), []);
   // Silence anything playing if this panel unmounts.
   useEffect(() => () => player.stop(), []);
+  useEffect(() => () => midiInput.setThru(false), []);
+
+  useEffect(() => {
+    midiInput.selectByName(midiInputName);
+  }, [midiInputName]);
+
+  useEffect(() => {
+    midiInput.setThru(soundPlayedNotes);
+  }, [soundPlayedNotes]);
+
+  // A saved input should reconnect without another click once MIDI is allowed.
+  useEffect(() => {
+    if (!midiInputName || !midiEngine.supported || midiEngine.enabled) return;
+    let cancel = false;
+    void (async () => {
+      setStatus('enabling');
+      const ok = await midiEngine.enable();
+      if (cancel) return;
+      if (ok) await midiInput.enable();
+      if (!cancel) setStatus(ok ? 'ready' : 'denied');
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [midiInputName]);
 
   const enable = async () => {
     if (!midiEngine.supported) {
@@ -57,11 +96,14 @@ export function MidiControls({
     }
     setStatus('enabling');
     const ok = await midiEngine.enable();
+    if (ok) await midiInput.enable();
     setStatus(ok ? 'ready' : 'denied');
   };
 
   const outputs = midiEngine.outputs();
-  const ready = status === 'ready';
+  const inputs = midiInput.inputs();
+  const ready = status === 'ready' || midiEngine.enabled;
+  const selectedInput = inputs.find((port) => port.name === midiInputName);
   const hasOutput = ready && !!midiEngine.outputId && outputs.length > 0;
   // Playback works through the built-in synth even with no MIDI device.
   const soundReady = synth.supported || hasOutput;
@@ -149,14 +191,14 @@ export function MidiControls({
 
       <span className="midi-sep" />
 
-      {/* Optional: also send notes to an external MIDI device */}
-      {!ready && (
-        <button className="btn-mini" onClick={enable} disabled={status === 'enabling'}>
-          {status === 'enabling' ? 'Enabling\u2026' : 'Send to MIDI\u2026'}
-        </button>
+      {/* Optional: send notes out, and listen for a keyboard. */}
+      {!midiEngine.supported && (
+        <span className="midi-note muted">MIDI needs Chrome or Edge.</span>
       )}
-      {status === 'unsupported' && (
-        <span className="midi-note muted">External MIDI needs Chrome or Edge.</span>
+      {midiEngine.supported && !ready && (
+        <button className="btn-mini" onClick={enable} disabled={status === 'enabling'}>
+          {status === 'enabling' ? 'Enabling\u2026' : 'Enable MIDI\u2026'}
+        </button>
       )}
       {status === 'denied' && <span className="midi-note muted">MIDI access was blocked.</span>}
 
@@ -198,9 +240,49 @@ export function MidiControls({
 
           {outputs.length === 0 && (
             <span className="midi-note muted">
-              No MIDI devices found &mdash; the built-in synth is still playing.
+              No MIDI outputs found &mdash; the built-in synth is still playing.
             </span>
           )}
+
+          <span className="midi-sep" />
+          <span className="midi-note muted">MIDI&nbsp;in</span>
+          <label className="midi-field">
+            Input
+            <select
+              value={selectedInput?.id ?? ''}
+              onChange={(e) => {
+                const port = inputs.find((item) => item.id === e.target.value);
+                onMidiInputName(port?.name ?? '');
+              }}
+            >
+              <option value="">None</option>
+              {inputs.map((port) => (
+                <option key={port.id} value={port.id}>
+                  {port.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {inputs.length === 0 && <span className="midi-note muted">No MIDI inputs found.</span>}
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={showPlayedNotes}
+              onChange={(e) => onShowPlayedNotes(e.target.checked)}
+            />
+            Show played notes
+          </label>
+          <label className="checkbox-row" title="Plays incoming notes on the built-in synth. Leave off to avoid doubling a hardware synth.">
+            <input
+              type="checkbox"
+              checked={soundPlayedNotes}
+              onChange={(e) => {
+                if (e.target.checked) synth.resume();
+                onSoundPlayedNotes(e.target.checked);
+              }}
+            />
+            Sound played notes
+          </label>
         </>
       )}
     </div>

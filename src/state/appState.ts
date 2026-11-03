@@ -70,6 +70,12 @@ export interface AppState {
   clickToHear: boolean;
   soundOctave: number;
   drone: boolean;
+  /** Web MIDI input port name. Empty selects none. A missing device stays none. */
+  midiInputName: string;
+  /** Draw notes held on the MIDI input. On unless a saved setup turns it off. */
+  showPlayedNotes: boolean;
+  /** Play MIDI input through the built-in synth. Off unless a saved setup turns it on. */
+  soundPlayedNotes: boolean;
   compareEnabled: boolean;
   compareRootPc: number;
   compareFamilyKey: FamilyKey;
@@ -77,7 +83,7 @@ export interface AppState {
   sharedOnly: boolean;
   /** Inclusive fret range for grips. Open strings are allowed only when min is 0. */
   positionWindow: { enabled: boolean; min: number; max: number };
-  /** Identify view: one fret per string. Missing keys are unpicked strings. */
+  /** Identify grip: one fret per string. Session only — omitted from saved setups. */
   picked: Record<number, number>;
   /** Quiz view. Mark keys are "stringIndex:fret". */
   quiz: {
@@ -131,6 +137,9 @@ export function createInitialState(): AppState {
     clickToHear: true,
     soundOctave: 4,
     drone: false,
+    midiInputName: '',
+    showPlayedNotes: true,
+    soundPlayedNotes: false,
     compareEnabled: false,
     compareRootPc: 10,
     compareFamilyKey: 'major',
@@ -182,24 +191,17 @@ function clampNum(v: unknown, lo: number, hi: number, fallback: number): number 
   return Math.max(lo, Math.min(hi, n));
 }
 
-function readPicked(v: unknown, numStrings: number, fretCount: number): Record<number, number> {
-  if (!isRecord(v)) return {};
-  const picked: Record<number, number> = {};
-  for (const [key, fret] of Object.entries(v)) {
-    const stringIndex = Number(key);
-    if (!Number.isInteger(stringIndex) || stringIndex < 0 || stringIndex >= numStrings) continue;
-    if (typeof fret !== 'number' || !Number.isInteger(fret) || fret < 0 || fret > fretCount) continue;
-    picked[stringIndex] = fret;
-  }
-  return picked;
-}
-
 function readPositionWindow(v: unknown, fretCount: number): AppState['positionWindow'] {
   const base = { enabled: false, min: 5, max: 8 };
   if (!isRecord(v)) return base;
   const min = clampNum(v.min, 0, fretCount, base.min);
   const max = clampNum(v.max, min, fretCount, base.max);
   return { enabled: v.enabled === true, min, max };
+}
+
+function readMidiInputName(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 128);
 }
 
 function controllerBaseOf(v: unknown): ControllerBaseOctave {
@@ -248,6 +250,11 @@ function readChord(v: unknown): Chord | null {
     tones,
     pcs: [...new Set(tones.map((t) => mod(rootPc + t.interval, 12)))],
   };
+}
+
+/** Copy of `app` safe to write to localStorage. The identify grip stays in memory only. */
+export function persistedApp(app: AppState): AppState {
+  return { ...app, picked: {} };
 }
 
 export function mergeApp(raw: unknown): AppState {
@@ -322,13 +329,16 @@ export function mergeApp(raw: unknown): AppState {
     clickToHear: raw.clickToHear !== false,
     soundOctave: clampNum(raw.soundOctave, 2, 6, 4),
     drone: raw.drone === true,
+    midiInputName: readMidiInputName(raw.midiInputName),
+    showPlayedNotes: raw.showPlayedNotes !== false,
+    soundPlayedNotes: raw.soundPlayedNotes === true,
     compareEnabled: raw.compareEnabled === true,
     compareRootPc: clampNum(raw.compareRootPc, 0, 11, base.compareRootPc),
     compareFamilyKey,
     compareModeKey: modeOf(compareFamilyKey, raw.compareModeKey, base.compareModeKey),
     sharedOnly: raw.sharedOnly === true,
     positionWindow: readPositionWindow(raw.positionWindow, fretCount),
-    picked: readPicked(raw.picked, numStrings, fretCount),
+    picked: {},
     noteQuiz: readNoteQuiz(raw.noteQuiz, numStrings, fretCount),
   };
 }

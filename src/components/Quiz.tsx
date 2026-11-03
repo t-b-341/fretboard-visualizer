@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { player } from '../audio/player';
 import type { Cell } from '../music/fretboard';
 import { mulberry32 } from '../music/progression';
@@ -10,6 +10,7 @@ import {
   cellsDuringAsk,
   cellsInPlay,
   gradeAnswer,
+  gradePlayedNote,
   loadQuizLog,
   median,
   padNames,
@@ -60,6 +61,8 @@ export interface NoteQuizApi {
   submitName: (name: string) => void;
   submitInterval: (name: string) => void;
   submitCells: () => void;
+  /** Played MIDI note. Answers name-the-note and reverse-interval by pitch class. */
+  answerPlayed: (midi: number) => void;
   next: () => void;
   play: () => void;
   playTogether: () => void;
@@ -201,6 +204,15 @@ export function useNoteQuiz(args: {
   if (rnd.current == null) rnd.current = mulberry32((Math.random() * 2 ** 32) >>> 0);
   const argsRef = useRef(args);
   argsRef.current = args;
+  const busy = useRef(false);
+  const finishRef = useRef<(result: GradeResult) => void>(() => {});
+  const questionRef = useRef(question);
+  const phaseRef = useRef(phase);
+  const heatmapRef = useRef(heatmap);
+  const poolRef = useRef<Cell[]>([]);
+  questionRef.current = question;
+  phaseRef.current = phase;
+  heatmapRef.current = heatmap;
 
   const make = () => {
     const current = argsRef.current;
@@ -222,6 +234,7 @@ export function useNoteQuiz(args: {
   };
 
   const arm = (nextQuestion: NoteQuizQuestion | null) => {
+    busy.current = false;
     stopHear();
     setQuestion(nextQuestion);
     setPhase('ask');
@@ -255,6 +268,7 @@ export function useNoteQuiz(args: {
   }, [enabled, phase, question, settings.harmonic]);
 
   const pool = useMemo(() => cellsInPlay(grid.flat(), settings, shift), [grid, settings, shift]);
+  poolRef.current = pool;
 
   const finish = (result: GradeResult) => {
     const at = Date.now();
@@ -272,6 +286,19 @@ export function useNoteQuiz(args: {
       times: [...current.times, ms].slice(-500),
     }));
   };
+  finishRef.current = finish;
+
+  const answerPlayed = useCallback((midi: number) => {
+    if (busy.current) return;
+    const now = argsRef.current;
+    const questionNow = questionRef.current;
+    const phaseNow = phaseRef.current;
+    if (!now.enabled || !questionNow || phaseNow !== 'ask' || heatmapRef.current) return;
+    const result = gradePlayedNote(questionNow, midi, poolRef.current, now.shift, now.settings.keyContext === 'key' ? now.musicalKey : null);
+    if (!result) return;
+    busy.current = true;
+    finishRef.current(result);
+  }, []);
 
   const submitName = (name: string) => {
     if (!question || phase !== 'ask' || question.type !== 'nameNote') return;
@@ -365,6 +392,7 @@ export function useNoteQuiz(args: {
     submitName,
     submitInterval,
     submitCells,
+    answerPlayed,
     next,
     play,
     playTogether,
