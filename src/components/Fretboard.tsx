@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
 import type { Chord } from '../music/chords';
@@ -69,6 +70,8 @@ interface Props {
   /** MIDI notes held from an input, drawn at every position with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
+  /** Shown above the neck. Used for the tab of a single grip. */
+  children?: ReactNode;
 }
 
 const NO_PLAYED: ReadonlySet<number> = new Set();
@@ -124,6 +127,7 @@ export function Fretboard(props: Props) {
     practice,
     showPlayed = false,
     playedMidis = NO_PLAYED,
+    children,
   } = props;
 
   const hidden = useMemo(() => new Set(hiddenStrings), [hiddenStrings]);
@@ -239,6 +243,7 @@ export function Fretboard(props: Props) {
   return (
     <div className="fretboard-wrap">
       {caption && <div className="board-caption">{caption}</div>}
+      {children}
       {visible.length === 0 ? (
         <p className="board-caption">Show at least one string.</p>
       ) : (

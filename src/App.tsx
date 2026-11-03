@@ -8,6 +8,7 @@ import { IdentifyPanel } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { Legend } from './components/Legend';
 import { MidiControls } from './components/MidiControls';
+import { TabExport } from './components/TabExport';
 import { ProgressionControls } from './components/ProgressionControls';
 import type { BuilderSeed } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
@@ -15,8 +16,10 @@ import { QuizPanel } from './components/QuizPanel';
 import { SetupBar } from './components/SetupBar';
 import { useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
+import { chordSymbol } from './music/chords';
 import { heldChordNotes, identifyChord } from './music/identify';
 import { mod, noteName } from './music/notes';
+import { formatTab } from './music/tab';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 import { deriveView } from './state/derive';
 import type { AppState, ColorMode } from './state/appState';
@@ -87,6 +90,22 @@ export default function App() {
   });
   const showFretboard =
     state.noteQuiz.enabled || state.instrumentView === 'fretboard' || state.instrumentView === 'both';
+  const gripSymbol = state.activeChord ? chordSymbol(state.activeChord, derived.shift) : '';
+  const gripTab = derived.shownVoicing ? (
+    <TabExport
+      text={formatTab(
+        state.tuning,
+        [
+          {
+            label: gripSymbol || undefined,
+            notes: derived.shownVoicing.notes,
+          },
+        ],
+        { labelShift: derived.shift },
+      )}
+      fileName={`fretboard-${gripSymbol.replace(/#/g, 'sharp').replace(/[^\w.-]+/g, '') || 'grip'}-grip.txt`}
+    />
+  ) : null;
   const answerPlayed = noteQuiz.answerPlayed;
   const seenHeld = useRef<ReadonlySet<number> | null>(null);
   useEffect(() => {
@@ -182,6 +201,14 @@ export default function App() {
         scalePcs={derived.scalePcs}
         shift={derived.shift}
         tuning={state.tuning}
+        fretCount={state.fretCount}
+        fretFrom={state.fretFrom}
+        fretTo={Math.min(state.fretTo, state.fretCount)}
+        voicingStyle={state.voicingStyle}
+        voicingInversion={state.voicingInversion}
+        voicingWidth={state.voicingWidth}
+        voicingSetStart={state.voicingSetStart}
+        activeGrip={derived.shownVoicing?.notes ?? null}
         active={state.viewMode === 'chord'}
         activeChord={state.activeChord}
         ghostScale={state.ghostScale}
@@ -270,8 +297,11 @@ export default function App() {
             practice={noteQuiz.practice}
             showPlayed={state.showPlayedNotes}
             playedMidis={held}
-          />
+          >
+            {gripTab}
+          </Fretboard>
         )}
+        {!showFretboard && gripTab && <div className="fretboard-wrap">{gripTab}</div>}
         {state.noteQuiz.enabled && (
           <Quiz
             api={noteQuiz}
