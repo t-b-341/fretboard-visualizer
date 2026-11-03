@@ -5,9 +5,11 @@ interface Props {
   text: string;
   fileName: string;
   disabled?: boolean;
+  /** Shown when export is disabled, so the reason is available on hover. */
+  title?: string;
 }
 
-export function TabExport({ text, fileName, disabled = false }: Props) {
+export function TabExport({ text, fileName, disabled = false, title }: Props) {
   const [copied, setCopied] = useState(false);
   const [fallback, setFallback] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -68,12 +70,16 @@ export function TabExport({ text, fileName, disabled = false }: Props) {
         {text}
       </pre>
       <div className="tab-export-actions">
-        <button type="button" className="btn-mini" onClick={copy} disabled={blocked}>
-          Copy tab
-        </button>
-        <button type="button" className="btn-mini" onClick={download} disabled={blocked}>
-          Download .txt
-        </button>
+        <span className={blocked && title ? 'tip-wrap' : undefined} title={blocked ? title : undefined}>
+          <button type="button" className="btn-mini" onClick={copy} disabled={blocked}>
+            Copy tab
+          </button>
+        </span>
+        <span className={blocked && title ? 'tip-wrap' : undefined} title={blocked ? title : undefined}>
+          <button type="button" className="btn-mini" onClick={download} disabled={blocked}>
+            Download .txt
+          </button>
+        </span>
         {copied && (
           <span className="muted" aria-live="polite">
             Copied

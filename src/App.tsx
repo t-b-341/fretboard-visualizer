@@ -22,14 +22,15 @@ import { TabExport } from './components/TabExport';
 import { chordSymbol } from './music/chords';
 import { mod, noteName } from './music/notes';
 import type { NoteQuizSettings } from './music/quiz';
+import { chordWrittenNotes } from './music/staff';
 import { formatTab } from './music/tab';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
-import type { Voicing } from './music/voicings';
 import { createInitialState, defaultProgression } from './state/appState';
 import type { AppState, ColorMode } from './state/appState';
 import { deriveView } from './state/derive';
 import { toLegacy } from './state/v2/adapter';
 import { useAppV2 } from './state/v2/useAppV2';
+import { chooseVoicings } from './state/v2/voicingChoice';
 
 export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
 export type { AppState, ColorMode };
@@ -49,12 +50,11 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setKey, setView, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault } =
+  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault } =
     useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
-  const [playbackVoicing, setPlaybackVoicing] = useState<Voicing | null>(null);
   const [referenceOn, setReferenceOn] = useState(false);
   const [referencePc, setReferencePc] = useState<number | null>(null);
   const [quizExtras, setQuizExtras] = useState({ naturalsOnly: false, harmonic: false });
@@ -71,9 +71,30 @@ export default function App() {
     }),
     [state],
   );
+  const fretRange = state.material.scale.fretRange;
+  const choices = useMemo(
+    () =>
+      chooseVoicings({
+        steps: state.material.steps,
+        shape: state.voicing.shape,
+        stringSet: state.voicing.stringSet,
+        smooth: state.voicing.smooth,
+        tuning: state.settings.instrument.tuning,
+        fretRange: fretRange.enabled ? { min: fretRange.min, max: fretRange.max } : undefined,
+        weights: state.settings.voiceLeadingWeights,
+      }),
+    [state, fretRange],
+  );
+  const stepIndex =
+    state.material.steps.length === 0
+      ? 0
+      : Math.min(Math.max(state.material.currentStep, 0), state.material.steps.length - 1);
+  const currentChoice = choices[stepIndex] ?? { voicings: [], index: 0, fellBack: false };
+  const chosenVoicing = currentChoice.voicings[currentChoice.index] ?? null;
+  const shownVoicing = state.material.type === 'scale' ? null : chosenVoicing;
   const derived = useMemo(
-    () => deriveView(legacy, session, playbackVoicing, referenceOn ? referencePc : null),
-    [legacy, session, playbackVoicing, referenceOn, referencePc],
+    () => deriveView(legacy, session, shownVoicing, referenceOn ? referencePc : null),
+    [legacy, session, shownVoicing, referenceOn, referencePc],
   );
   const held = useHeldNotes();
   const quizSettings = useMemo<NoteQuizSettings>(
@@ -138,17 +159,42 @@ export default function App() {
     }
   }, [held, answerPlayed]);
 
-  const gripSymbol = legacy.activeChord ? chordSymbol(legacy.activeChord, derived.shift) : '';
-  const gripTab = derived.shownVoicing ? (
-    <TabExport
-      text={formatTab(
-        legacy.tuning,
-        [{ label: gripSymbol || undefined, notes: derived.shownVoicing.notes }],
-        { labelShift: derived.shift },
-      )}
-      fileName={`fretboard-${gripSymbol.replace(/#/g, 'sharp').replace(/[^\w.-]+/g, '') || 'grip'}-grip.txt`}
-    />
-  ) : null;
+  const tabSymbol = legacy.activeChord ? chordSymbol(legacy.activeChord, derived.shift) : '';
+  const tabTitle =
+    state.voicing.shape === 'all'
+      ? 'All tones has no single voicing to export'
+      : 'No voicing to export';
+  const tabExport =
+    state.material.type === 'scale' ? null : (
+      <TabExport
+        text={
+          shownVoicing
+            ? formatTab(legacy.tuning, [{ label: tabSymbol || undefined, notes: shownVoicing.notes }], {
+                labelShift: derived.shift,
+              })
+            : ''
+        }
+        fileName={`fretboard-${tabSymbol.replace(/#/g, 'sharp').replace(/[^\w.-]+/g, '') || 'voicing'}-voicing.txt`}
+        disabled={!shownVoicing}
+        title={shownVoicing ? undefined : tabTitle}
+      />
+    );
+  const playStep = () => {
+    const notes = state.voicing.shape === 'all' ? null : chosenVoicing;
+    if (notes) {
+      player.playChord(
+        notes.notes.map((note) => note.midi),
+        { durationMs: 1200 },
+      );
+      return;
+    }
+    const chord = state.material.steps[stepIndex]?.chord;
+    if (!chord) return;
+    player.playChord(
+      chordWrittenNotes(chord).map((note) => note.midi),
+      { durationMs: 1200 },
+    );
+  };
   const fretTo = Math.min(legacy.fretTo, legacy.fretCount);
   const onPlay = (midi: number) => player.playNote(midi, 420);
 
@@ -173,6 +219,18 @@ export default function App() {
             onKey={setKey}
             onAddChord={addChord}
             onSuggest={suggest}
+            voicingShape={state.voicing.shape}
+            stringSet={state.voicing.stringSet}
+            smooth={state.voicing.smooth}
+            stringCount={state.settings.instrument.numStrings}
+            chord={state.material.steps[stepIndex]?.chord ?? null}
+            voicingCount={currentChoice.voicings.length}
+            voicingIndex={currentChoice.index}
+            fellBack={currentChoice.fellBack}
+            onVoicingShape={(shape) => setVoicing({ shape })}
+            onStringSet={(stringSet) => setVoicing({ stringSet })}
+            onSmooth={(smooth) => setVoicing({ smooth })}
+            onVoicingIndex={(index) => setStepVoicing(stepIndex, index)}
           />
           <div className="workspace-main">
             <StepsStrip
@@ -182,6 +240,7 @@ export default function App() {
               intervals={derived.intervals}
               shift={derived.shift}
               onPrev={prevStep}
+              onPlay={playStep}
               onNext={nextStep}
               onSelect={setCurrentStep}
               onToggleLock={toggleLock}
@@ -207,7 +266,7 @@ export default function App() {
                   rootPc={legacy.rootPc}
                   intervals={derived.intervals}
                   chord={derived.voicedChord}
-                  voicingMidis={derived.shownVoicing ? derived.shownVoicing.notes.map((note) => note.midi) : null}
+                  voicingMidis={shownVoicing ? shownVoicing.notes.map((note) => note.midi) : null}
                   pickedMidis={derived.pickedNotes.map((note) => note.midi)}
                   guitarWritten={state.view.staffPitch === 'guitar'}
                   onGuitarWritten={(guitarWritten) => setView({ staffPitch: guitarWritten ? 'guitar' : 'concert' })}
@@ -253,7 +312,7 @@ export default function App() {
                   showPlayed={legacy.showPlayedNotes}
                   playedMidis={held}
                 >
-                  {gripTab}
+                  {tabExport}
                 </Fretboard>
               </ViewCard>
             )}
@@ -267,7 +326,8 @@ export default function App() {
                   guidePcs={derived.guidePcs}
                   colorByDegree={derived.colorByDegree}
                   clickToHear={legacy.clickToHear}
-                  evaluate={derived.evaluateKeyboard}
+                  evaluate={derived.evaluateFretboard}
+                  voicingMidis={shownVoicing ? shownVoicing.notes.map((note) => note.midi) : null}
                   onPlay={onPlay}
                   onReference={referenceOn ? chooseReference : undefined}
                   showPlayed={legacy.showPlayedNotes}
@@ -292,17 +352,7 @@ export default function App() {
                 onComparePreset={noop}
                 npsShapes={derived.npsShapes}
                 cagedShapes={derived.cagedShapes}
-                voicingToneCount={derived.voicingToneCount}
                 onShape={noop}
-                voicingCount={derived.voicingCount}
-                voicingIndex={derived.voicingIndex}
-                onPlayVoicing={() => {
-                  if (!derived.selectedVoicing) return;
-                  player.playChord(
-                    derived.selectedVoicing.notes.map((note) => note.midi),
-                    { durationMs: 1200 },
-                  );
-                }}
                 referenceOn={referenceOn}
                 referenceName={derived.referenceName}
                 onToggleReference={toggleReference}
@@ -324,7 +374,7 @@ export default function App() {
                 activeChord={legacy.activeChord}
                 ghostScale={legacy.ghostScale}
                 onShowChord={noop}
-                onShowVoicing={setPlaybackVoicing}
+                onShowVoicing={noop}
                 onGhostScale={noop}
                 guideTones={legacy.guideTones}
                 onGuideTones={noop}

@@ -412,7 +412,7 @@ export function ProgressionControls(props: Props) {
         </label>
         <label
           className="checkbox-row"
-          title="Play and export each chord as the next grip in a smooth path. Off uses a root-position stack in the selected octave."
+          title="Play and export each chord as the next voicing in a smooth path. Off uses a root-position stack in the selected octave."
         >
           <input
             type="checkbox"

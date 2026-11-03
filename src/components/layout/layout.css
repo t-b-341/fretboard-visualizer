@@ -427,6 +427,67 @@
   margin-top: 8px;
 }
 
+.voicing-panel .segmented {
+  display: flex;
+  width: 100%;
+}
+
+.voicing-panel .segmented button {
+  flex: 1;
+}
+
+.voicing-field {
+  display: block;
+  margin-top: 10px;
+}
+
+.voicing-panel select {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 4px;
+}
+
+.voicing-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.voicing-stepper button {
+  min-width: 36px;
+  min-height: 36px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.voicing-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.voicing-stepper button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.voicing-count {
+  flex: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.voicing-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .suggest-panel select {
   width: 100%;
   margin-top: 4px;

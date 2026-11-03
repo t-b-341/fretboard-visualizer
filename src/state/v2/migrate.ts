@@ -170,6 +170,7 @@ function readSteps(v: unknown): Step[] {
       ...(bassPc !== undefined ? { bassPc } : {}),
       locked: item.locked === true,
       voicingIndex: clampNum(item.voicingIndex, 0, 10000, 0),
+      ...(item.voicingManual === true ? { voicingManual: true } : {}),
       source,
     });
   }

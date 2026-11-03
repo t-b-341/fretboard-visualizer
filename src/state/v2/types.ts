@@ -23,6 +23,8 @@ export interface Step {
   bassPc?: number;
   locked: boolean;
   voicingIndex: number;
+  /** The player picked this step's voicing. Smooth voice leading leaves it alone. */
+  voicingManual?: boolean;
   source: StepSource;
 }
 

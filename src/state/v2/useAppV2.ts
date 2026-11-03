@@ -18,6 +18,8 @@ export type AppAction =
   | { type: 'setMaterialType'; material: MaterialType }
   | { type: 'setKey'; key: KeySelection }
   | { type: 'setView'; view: Partial<AppStateV2['view']> }
+  | { type: 'setVoicing'; voicing: Partial<AppStateV2['voicing']> }
+  | { type: 'setStepVoicing'; step: number; voicingIndex: number }
   | { type: 'setCurrentStep'; index: number }
   | { type: 'prevStep' }
   | { type: 'nextStep' }
@@ -134,6 +136,29 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       if (VIEW_KEYS.every((key) => view[key] === state.view[key])) return state;
       return { ...state, view };
     }
+    case 'setVoicing': {
+      const voicing = { ...state.voicing, ...action.voicing };
+      if (voicing.shape !== 'all' && voicing.shape !== 'close' && voicing.shape !== 'drop2') return state;
+      if (!Number.isInteger(voicing.stringSet) || voicing.stringSet < 0) voicing.stringSet = state.voicing.stringSet;
+      if (
+        voicing.shape === state.voicing.shape &&
+        voicing.stringSet === state.voicing.stringSet &&
+        voicing.smooth === state.voicing.smooth
+      ) {
+        return state;
+      }
+      return { ...state, voicing };
+    }
+    case 'setStepVoicing': {
+      const current = state.material.steps[action.step];
+      if (!current) return state;
+      const voicingIndex = Math.max(0, Math.floor(action.voicingIndex));
+      if (current.voicingIndex === voicingIndex && current.voicingManual === true) return state;
+      const steps = state.material.steps.map((step, index) =>
+        index === action.step ? { ...step, voicingIndex, voicingManual: true } : step,
+      );
+      return { ...state, material: { ...state.material, steps } };
+    }
     case 'setCurrentStep':
       return moveStep(state, action.index);
     case 'prevStep':
@@ -241,6 +266,12 @@ export function useAppV2() {
   const setView = useCallback((view: Partial<AppStateV2['view']>) => {
     dispatch({ type: 'setView', view });
   }, []);
+  const setVoicing = useCallback((voicing: Partial<AppStateV2['voicing']>) => {
+    dispatch({ type: 'setVoicing', voicing });
+  }, []);
+  const setStepVoicing = useCallback((step: number, voicingIndex: number) => {
+    dispatch({ type: 'setStepVoicing', step, voicingIndex });
+  }, []);
   const setCurrentStep = useCallback((index: number) => {
     dispatch({ type: 'setCurrentStep', index });
   }, []);
@@ -278,6 +309,8 @@ export function useAppV2() {
     setMaterialType,
     setKey,
     setView,
+    setVoicing,
+    setStepVoicing,
     setCurrentStep,
     prevStep,
     nextStep,

@@ -8,8 +8,6 @@ import type { ControllerBaseOctave } from '../music/keys';
 import { mod, noteName, pitchName } from '../music/notes';
 import type { NeckShape, ShapeMode } from '../music/shapes';
 import { notesPerString } from '../music/shapes';
-import { voicingStringSets } from '../music/voicings';
-
 function copyPageLink() {
   const href = window.location.href;
   const write = navigator.clipboard?.writeText;
@@ -52,13 +50,7 @@ interface Props {
   onComparePreset: (kind: 'parallel' | 'relative') => void;
   npsShapes: NeckShape[];
   cagedShapes: NeckShape[];
-  /** How many tones the current voicing can use (3 for a triad, 4 when a 7th is available). */
-  voicingToneCount: number;
   onShape: (mode: ShapeMode, index: number) => void;
-  /** Generated grips for the chord on screen. Used by the one-voicing stepper. */
-  voicingCount: number;
-  voicingIndex: number;
-  onPlayVoicing: () => void;
   /** Interval reference. The pitch itself stays out of saved state. */
   referenceOn: boolean;
   referenceName: string | null;
@@ -82,11 +74,7 @@ export function Controls(props: Props) {
     onComparePreset,
     npsShapes,
     cagedShapes,
-    voicingToneCount,
     onShape,
-    voicingCount,
-    voicingIndex,
-    onPlayVoicing,
     referenceOn,
     referenceName,
     onToggleReference,
@@ -122,10 +110,6 @@ export function Controls(props: Props) {
   const perString = notesPerString(mode.intervals.length);
   const shapes = state.shapeMode === 'nps' ? npsShapes : state.shapeMode === 'caged' ? cagedShapes : [];
   const shapeIndex = shapes.length === 0 ? 0 : Math.min(state.shapeIndex, shapes.length - 1);
-  const voicingWidth = state.voicingStyle === 'drop2' ? 4 : state.voicingWidth;
-  const stringSets = voicingStringSets(state.numStrings, voicingWidth);
-  const inversionCount = Math.min(4, Math.max(1, voicingToneCount));
-  const showVoicing = state.viewMode === 'triad' || state.viewMode === 'chord';
 
   const setHidden = (hidden: number[]) => {
     const unique = [...new Set(hidden.filter((i) => i >= 0 && i < state.numStrings))];
@@ -607,53 +591,6 @@ export function Controls(props: Props) {
           </div>
           </div>
         </div>
-        {state.viewMode === 'chord' && (
-          <div className="field">
-            <label>On the neck</label>
-            <div className="segmented" role="group" aria-label="Chord display">
-              <button
-                className={state.chordDisplay === 'all' ? 'active' : ''}
-                onClick={() => onUpdate({ chordDisplay: 'all' })}
-              >
-                All tones
-              </button>
-              <button
-                className={state.chordDisplay === 'voicing' ? 'active' : ''}
-                onClick={() => onUpdate({ chordDisplay: 'voicing' })}
-              >
-                One voicing
-              </button>
-            </div>
-            {state.chordDisplay === 'voicing' && (
-              <div className="voicing-picker">
-                {voicingCount === 0 ? (
-                  <span className="muted">No playable voicing</span>
-                ) : (
-                  <div className="segmented" role="group" aria-label="Which voicing">
-                    <button
-                      disabled={voicingIndex <= 0}
-                      onClick={() => onUpdate({ voicingIndex: voicingIndex - 1 })}
-                    >
-                      Prev
-                    </button>
-                    <span className="segment-value">
-                      {voicingIndex + 1} of {voicingCount}
-                    </span>
-                    <button
-                      disabled={voicingIndex >= voicingCount - 1}
-                      onClick={() => onUpdate({ voicingIndex: voicingIndex + 1 })}
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-                <button className="btn-mini" disabled={voicingCount === 0} onClick={onPlayVoicing}>
-                  Play voicing
-                </button>
-              </div>
-            )}
-          </div>
-        )}
         {state.viewMode === 'triad' && (
           <>
             <div className="field">
@@ -766,83 +703,6 @@ export function Controls(props: Props) {
           </div>
         </div>
       </div>
-
-      {showVoicing && (
-        <div className="control-group">
-          <span className="group-label">Voicing</span>
-          <div className="field">
-            <label>Grip</label>
-            <div className="segmented" role="group" aria-label="Voicing">
-              {(['all', 'close', 'drop2'] as const).map((style) => (
-                <button
-                  key={style}
-                  className={state.voicingStyle === style ? 'active' : ''}
-                  disabled={style === 'drop2' && voicingToneCount < 4}
-                  onClick={() => {
-                    const width = style === 'drop2' ? 4 : state.voicingWidth;
-                    const start = Math.max(0, Math.min(state.voicingSetStart, state.numStrings - width));
-                    onUpdate({ voicingStyle: style, voicingWidth: width as 3 | 4, voicingSetStart: start });
-                  }}
-                >
-                  {style === 'all' ? 'All tones' : style === 'close' ? 'Close' : 'Drop-2'}
-                </button>
-              ))}
-            </div>
-          </div>
-          {state.voicingStyle !== 'all' && (
-            <>
-              <div className="field">
-                <label>Inversion</label>
-                <select
-                  value={Math.min(state.voicingInversion, inversionCount - 1)}
-                  onChange={(e) => onUpdate({ voicingInversion: Number(e.target.value) })}
-                >
-                  {['Root position', '1st inversion', '2nd inversion', '3rd inversion']
-                    .slice(0, inversionCount)
-                    .map((label, i) => (
-                      <option key={label} value={i}>
-                        {label}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              {state.voicingStyle === 'close' && (
-                <div className="field">
-                  <label>Strings in the grip</label>
-                  <div className="segmented" role="group" aria-label="Voicing width">
-                    {[3, 4].map((w) => (
-                      <button
-                        key={w}
-                        className={voicingWidth === w ? 'active' : ''}
-                        disabled={w === 4 && voicingToneCount < 4}
-                        onClick={() => {
-                          const start = Math.max(0, Math.min(state.voicingSetStart, state.numStrings - w));
-                          onUpdate({ voicingWidth: w as 3 | 4, voicingSetStart: start });
-                        }}
-                      >
-                        {w}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="field">
-                <label>String set</label>
-                <select
-                  value={Math.min(state.voicingSetStart, Math.max(0, stringSets.length - 1))}
-                  onChange={(e) => onUpdate({ voicingSetStart: Number(e.target.value) })}
-                >
-                  {stringSets.map((set) => (
-                    <option key={set.start} value={set.start}>
-                      {set.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }

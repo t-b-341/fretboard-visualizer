@@ -59,7 +59,9 @@ function staffLabel(layout: StaffLayout): string {
       return mark ? `${note.written.name} ${mark}` : note.written.name;
     })
     .join(' ');
-  return names ? `${system}, ${sig}: ${names}` : `${system}, ${sig}`;
+  const body = names ? `${system}, ${sig}: ${names}` : `${system}, ${sig}`;
+  if (layout.notes.length === 0) return body;
+  return `${body}. MIDI ${layout.notes.map((note) => note.midi).join(' ')}`;
 }
 
 function SharpGlyph() {

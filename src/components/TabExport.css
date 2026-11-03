@@ -11,6 +11,14 @@
   flex-wrap: wrap;
 }
 
+.tip-wrap {
+  display: inline-flex;
+}
+
+.tip-wrap button {
+  pointer-events: none;
+}
+
 .tab-preview,
 .tab-fallback {
   margin: 0;

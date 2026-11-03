@@ -11,6 +11,7 @@ export function StepsStrip({
   intervals,
   shift,
   onPrev,
+  onPlay,
   onNext,
   onSelect,
   onToggleLock,
@@ -23,6 +24,7 @@ export function StepsStrip({
   intervals: number[];
   shift: number;
   onPrev: () => void;
+  onPlay: () => void;
   onNext: () => void;
   onSelect: (index: number) => void;
   onToggleLock: (index: number) => void;
@@ -60,6 +62,9 @@ export function StepsStrip({
         <div className="step-nav">
           <button type="button" aria-label="Prev" onClick={onPrev} disabled={steps.length === 0 || currentStep <= 0}>
             ‹ Prev
+          </button>
+          <button type="button" aria-label="Play" onClick={onPlay} disabled={steps.length === 0}>
+            Play
           </button>
           <button
             type="button"

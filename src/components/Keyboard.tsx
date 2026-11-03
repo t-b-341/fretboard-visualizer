@@ -1,6 +1,6 @@
 import type { ViewMode } from '../music/types';
 import { noteFillClass, noteTextClass, type NoteHighlight } from '../music/highlight';
-import { guideForWindow, keyboardWindow } from '../music/keys';
+import { keyboardWindow } from '../music/keys';
 import { pitchName } from '../music/notes';
 
 interface Props {
@@ -17,8 +17,10 @@ interface Props {
   onPlay: (midi: number) => void;
   /** While interval reference is armed, a click sets or clears that pitch class. */
   onReference?: (pc: number) => void;
-  /** Pitch-class highlight. A voicing already limits which chord tones are placed. */
-  evaluate: (pc: number) => NoteHighlight | null;
+  /** Pitch-class highlight. A voicing passes `placed` for its exact MIDI notes. */
+  evaluate: (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null;
+  /** Exact keys of the current voicing. Omit to light every matching pitch class. */
+  voicingMidis?: readonly number[] | null;
   /** MIDI notes held from an input, drawn on the key with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
@@ -69,6 +71,7 @@ export function Keyboard(props: Props) {
     compareEnabled,
     guidePcs,
     evaluate,
+    voicingMidis = null,
     showPlayed = false,
     playedMidis = NO_PLAYED,
   } = props;
@@ -81,9 +84,16 @@ export function Keyboard(props: Props) {
     play(midi);
   };
   const keyWindow = keyboardWindow(octaves, lowestMidi);
-  const guideByMidi = new Map(
-    guideForWindow(evaluate, keyWindow).map((note) => [note.midi, note.highlight]),
-  );
+  const placed = voicingMidis ? new Set(voicingMidis) : null;
+  const guideByMidi = new Map<number, NoteHighlight>();
+  const top = keyWindow.lowest + keyWindow.keyCount;
+  for (let midi = keyWindow.lowest; midi < top; midi++) {
+    if (midi < 0 || midi > 127) continue;
+    const highlight = placed
+      ? evaluate(midi % 12, { placed: placed.has(midi), midi })
+      : evaluate(midi % 12);
+    if (highlight) guideByMidi.set(midi, highlight);
+  }
   const midiFor = (octaveOffset: number, pc: number) => lowestMidi + octaveOffset * 12 + pc;
 
   // Full octaves of 7 white keys, plus a trailing C to close the top octave.
@@ -127,7 +137,7 @@ export function Keyboard(props: Props) {
       );
     }
     return (
-      <g key={key} className="key-dot">
+      <g key={key} className="key-dot" data-midi={midi}>
         <circle className={noteFillClass(ev, degreeColors)} cx={cx} cy={cy} r={R} />
         {ev.ring && <circle className="note-root-ring" cx={cx} cy={cy} r={R + 3} />}
         {ev.reference && <circle className="note-reference-ring" cx={cx} cy={cy} r={R + 6} />}

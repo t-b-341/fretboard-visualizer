@@ -1,9 +1,11 @@
 import type { Chord } from '../../music/chords';
+import type { VoicingShape } from '../../music/voicingSet';
 import type { SuggestStyle } from '../../state/v2/suggest';
 import type { MaterialType, NameStyle, KeySelection, Step } from '../../state/v2/types';
 import { AddChord } from './AddChord';
 import { KeyPanel } from './KeyPanel';
 import { SuggestPanel } from './SuggestPanel';
+import { VoicingPanel } from './VoicingPanel';
 
 const NOTES: Record<MaterialType, string> = {
   scale: 'One scale, on the staff, the neck, and the keyboard.',
@@ -27,6 +29,18 @@ export function MaterialPanel({
   onKey,
   onAddChord,
   onSuggest,
+  voicingShape,
+  stringSet,
+  smooth,
+  stringCount,
+  chord,
+  voicingCount,
+  voicingIndex,
+  fellBack,
+  onVoicingShape,
+  onStringSet,
+  onSmooth,
+  onVoicingIndex,
 }: {
   type: MaterialType;
   onType: (type: MaterialType) => void;
@@ -37,6 +51,18 @@ export function MaterialPanel({
   onKey: (key: KeySelection) => void;
   onAddChord: (chord: Chord, bassPc?: number) => void;
   onSuggest: (style: SuggestStyle, borrowed: boolean) => void;
+  voicingShape: VoicingShape;
+  stringSet: number;
+  smooth: boolean;
+  stringCount: number;
+  chord: Chord | null;
+  voicingCount: number;
+  voicingIndex: number;
+  fellBack: boolean;
+  onVoicingShape: (shape: VoicingShape) => void;
+  onStringSet: (stringSet: number) => void;
+  onSmooth: (smooth: boolean) => void;
+  onVoicingIndex: (index: number) => void;
 }) {
   return (
     <aside className="material-panel" data-testid="material-panel">
@@ -66,9 +92,20 @@ export function MaterialPanel({
       <AddChord selection={selection} onAdd={onAddChord} />
       <SuggestPanel onSuggest={onSuggest} />
 
-      <section data-testid="voicing-panel">
-        <h2>Voicing</h2>
-      </section>
+      <VoicingPanel
+        shape={voicingShape}
+        stringSet={stringSet}
+        smooth={smooth}
+        stringCount={stringCount}
+        chord={chord}
+        count={voicingCount}
+        index={voicingIndex}
+        fellBack={fellBack}
+        onShape={onVoicingShape}
+        onStringSet={onStringSet}
+        onSmooth={onSmooth}
+        onIndex={onVoicingIndex}
+      />
 
       <details className="compare-panel" data-testid="compare-panel">
         <summary>
