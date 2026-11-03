@@ -302,6 +302,7 @@ function normalizeInner(raw: unknown): AppStateV2 {
         rootPc: clampNum(compareIn.rootPc, 0, 11, base.material.compare.rootPc),
         familyKey: compareFamily,
         modeKey: modeOf(compareFamily, compareIn.modeKey, base.material.compare.modeKey),
+        sharedOnly: typeof compareIn.sharedOnly === 'boolean' ? compareIn.sharedOnly : base.material.compare.sharedOnly,
       },
       scale: {
         positions,
@@ -519,6 +520,7 @@ export function migrateV1(raw: unknown): AppStateV2 {
           rootPc: app.compareRootPc,
           familyKey: app.compareFamilyKey,
           modeKey: app.compareModeKey,
+          sharedOnly: app.sharedOnly,
         },
         scale: {
           positions: app.shapeMode,

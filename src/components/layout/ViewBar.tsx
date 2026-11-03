@@ -15,6 +15,10 @@ export function ViewBar({
   onNames,
   onShowKey,
   onVoiceMotion,
+  referenceOn,
+  referenceName,
+  onToggleReference,
+  onClearReference,
 }: {
   staff: boolean;
   neck: boolean;
@@ -30,6 +34,10 @@ export function ViewBar({
   onNames: (names: NameStyle) => void;
   onShowKey: (on: boolean) => void;
   onVoiceMotion: (on: boolean) => void;
+  referenceOn: boolean;
+  referenceName: string | null;
+  onToggleReference: (on: boolean) => void;
+  onClearReference: () => void;
 }) {
   return (
     <div className="view-bar" data-testid="view-bar">
@@ -55,6 +63,22 @@ export function ViewBar({
         <Choice current={names} value="concert" label="Concert" onPick={onNames} />
         <Choice current={names} value="standard" label="Standard" onPick={onNames} />
       </div>
+      <button
+        type="button"
+        className={referenceOn ? 'intervals-toggle active' : 'intervals-toggle'}
+        aria-pressed={referenceOn}
+        onClick={() => onToggleReference(!referenceOn)}
+      >
+        Intervals from…
+      </button>
+      {referenceName && (
+        <span className="reference-chip">
+          Intervals from {referenceName}
+          <button type="button" className="reference-chip-x" aria-label="Clear reference" onClick={onClearReference}>
+            ×
+          </button>
+        </span>
+      )}
       <label>
         <input type="checkbox" checked={showKey} onChange={(event) => onShowKey(event.target.checked)} />
         Show key

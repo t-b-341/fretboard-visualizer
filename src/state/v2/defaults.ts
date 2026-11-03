@@ -43,6 +43,7 @@ export function createDefaultV2(): AppStateV2 {
         rootPc: today.compareRootPc,
         familyKey: today.compareFamilyKey,
         modeKey: today.compareModeKey,
+        sharedOnly: today.sharedOnly,
       },
       scale: {
         positions: today.shapeMode,

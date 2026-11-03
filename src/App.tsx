@@ -5,22 +5,21 @@ import { midiEngine } from './audio/midi';
 import { midiInput, useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
 import { progressionToSmf } from './audio/midi';
+import { synth } from './audio/synth';
 import { scaleUpAndDown, useTransportPlayback } from './audio/useTransport';
-import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
 import { GrandStaff } from './components/GrandStaff';
 import { IdentifyPanel, toggleKeyPick, toggleNeckPick } from './components/IdentifyPanel';
 import type { KeyPick, NeckPick } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { AppHeader } from './components/layout/AppHeader';
+import { CompareLegend } from './components/layout/CompareLegend';
 import { MaterialPanel } from './components/layout/MaterialPanel';
+import { SetupsMenu } from './components/layout/SetupsMenu';
 import { SettingsDrawer } from './components/layout/SettingsDrawer';
 import { StepsStrip } from './components/layout/StepsStrip';
 import { ViewBar } from './components/layout/ViewBar';
 import { ViewCard } from './components/layout/ViewCard';
-import { MidiControls } from './components/MidiControls';
-import { ProgressionControls } from './components/ProgressionControls';
-import type { ProgressionSnapshot } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
 import { TabExport } from './components/TabExport';
 import { downloadBytes } from './components/layout/ExportMenu';
@@ -31,14 +30,16 @@ import { candidateLabel, heldChordNotes, identifyChord } from './music/identify'
 import { keyLabel } from './music/keyLabel';
 import type { ChordToneRole } from './music/chords';
 import { mod, noteName } from './music/notes';
+import { notesPerString } from './music/shapes';
 import type { NoteQuizSettings } from './music/quiz';
 import { chordWrittenNotes } from './music/staff';
 import { formatTab } from './music/tab';
 import type { DisplayMode, InstrumentView, LabelMode, ViewMode } from './music/types';
 import { createInitialState, defaultProgression } from './state/appState';
-import type { AppState, ColorMode } from './state/appState';
+import type { AppState, ColorMode, ProgressionSnapshot } from './state/appState';
 import { deriveView } from './state/derive';
 import { toLegacy } from './state/v2/adapter';
+import { clampKeyboardLowest } from './state/v2/keyboardSpan';
 import { useAppV2 } from './state/v2/useAppV2';
 import type { Step } from './state/v2/types';
 import { chooseVoicings } from './state/v2/voicingChoice';
@@ -46,8 +47,6 @@ import { chooseVoicings } from './state/v2/voicingChoice';
 export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
 export type { AppState, ColorMode };
 export { createInitialState };
-
-const noop = () => {};
 
 function useTab(): 'workspace' | 'practice' {
   const read = () => (window.location.hash === '#practice' ? 'practice' : 'workspace');
@@ -61,8 +60,42 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, addIdentified, replaceIdentified, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault, setTransport, setMidiInput } =
-    useAppV2();
+  const {
+    state,
+    setMaterialType,
+    setKey,
+    setView,
+    setVoicing,
+    setStepVoicing,
+    setCurrentStep,
+    prevStep,
+    nextStep,
+    addChord,
+    addIdentified,
+    replaceIdentified,
+    removeStep,
+    toggleLock,
+    rerollStep,
+    suggest,
+    setNoteQuiz,
+    setStartIn,
+    setMyDefault,
+    setTransport,
+    reset,
+    setNumStrings,
+    setTuningPreset,
+    setStringPitch,
+    setLeftHanded,
+    setNeck,
+    setKeyboard,
+    setSound,
+    setMidi,
+    setWeights,
+    resetWeights,
+    setCompare,
+    setScale,
+    replaceState,
+  } = useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [identifyOn, setIdentifyOn] = useState(false);
@@ -194,9 +227,38 @@ export default function App() {
   );
 
   const midiInputName = state.settings.midi.inputName;
+  const soundPlayed = state.settings.midi.soundPlayed;
+  const midiChannel = state.settings.midi.channel;
+  const midiOutputName = state.settings.midi.outputName;
   useEffect(() => {
     midiInput.selectByName(midiInputName);
   }, [midiInputName]);
+  useEffect(() => {
+    midiInput.setThru(soundPlayed);
+  }, [soundPlayed]);
+  useEffect(() => {
+    midiEngine.setChannel(midiChannel);
+  }, [midiChannel]);
+  useEffect(() => {
+    const apply = () => {
+      if (!midiEngine.enabled || !midiOutputName) return;
+      const port = midiEngine.outputs().find((item) => item.name === midiOutputName);
+      if (port && port.id !== midiEngine.outputId) midiEngine.setOutput(port.id);
+    };
+    apply();
+    return midiEngine.subscribe(apply);
+  }, [midiOutputName]);
+  useEffect(() => {
+    if (Math.abs(synth.volume - state.settings.sound.volume) > 0.001) synth.setVolume(state.settings.sound.volume);
+    if (synth.muted !== state.settings.sound.muted) synth.setMuted(state.settings.sound.muted);
+  }, [state.settings.sound.volume, state.settings.sound.muted]);
+  const droneOn = state.settings.sound.drone;
+  const droneMidi = (state.settings.sound.octave + 1) * 12 + state.material.key.rootPc;
+  useEffect(() => {
+    if (droneOn) player.startDrone(droneMidi);
+    else player.stopDrone();
+  }, [droneOn, droneMidi]);
+  useEffect(() => () => player.stopDrone(), []);
   useEffect(() => {
     if (!midiInputName || !midiEngine.supported || midiEngine.enabled) return;
     let cancel = false;
@@ -403,6 +465,25 @@ export default function App() {
         });
   const fretTo = Math.min(legacy.fretTo, legacy.fretCount);
   const onPlay = (midi: number) => player.playNote(midi, 420);
+  const keyboardLowest = clampKeyboardLowest(state.settings.keyboard.octaves, state.settings.keyboard.lowestMidi);
+  const compareLegend =
+    state.material.type === 'scale' && state.material.compare.enabled ? (
+      <CompareLegend
+        primary={`${noteName(mod(state.material.key.rootPc + derived.shift, 12))} ${derived.mode.name}`}
+        overlay={`${derived.compareRootName} ${derived.compareMode.name}`}
+        sharedCount={derived.sharedCount}
+      />
+    ) : null;
+  const loadSetup = (next: Parameters<typeof replaceState>[0]) => {
+    replaceState(next);
+    setReferenceOn(false);
+    setReferencePc(null);
+  };
+  const resetSetup = () => {
+    reset();
+    setReferenceOn(false);
+    setReferencePc(null);
+  };
 
   return (
     <div className="app">
@@ -411,6 +492,7 @@ export default function App() {
         drawerOpen={drawerOpen}
         settingsRef={settingsRef}
         onOpenSettings={() => setDrawerOpen(true)}
+        setups={<SetupsMenu state={state} onLoad={loadSetup} onReset={resetSetup} />}
       />
 
       {tab === 'workspace' ? (
@@ -440,6 +522,19 @@ export default function App() {
             onStringSet={(stringSet) => setVoicing({ stringSet })}
             onSmooth={(smooth) => setVoicing({ smooth })}
             onVoicingIndex={(index) => setStepVoicing(stepIndex, index)}
+            compare={state.material.compare}
+            intervals={derived.intervals}
+            shift={derived.shift}
+            onCompare={setCompare}
+            positions={state.material.scale.positions}
+            positionIndex={state.material.scale.positionIndex}
+            fretRange={state.material.scale.fretRange}
+            perString={notesPerString(derived.intervals.length)}
+            npsShapes={derived.npsShapes}
+            cagedShapes={derived.cagedShapes}
+            onPositions={(positions) => setScale({ positions, positionIndex: positions === 'all' ? 0 : state.material.scale.positionIndex })}
+            onPositionIndex={(positionIndex) => setScale({ positionIndex })}
+            onFretRange={(fretRange) => setScale({ fretRange })}
           />
           <div className="workspace-main">
             <StepsStrip
@@ -481,6 +576,10 @@ export default function App() {
               onNames={(names) => setView({ names })}
               onShowKey={(showKey) => setView({ showKey })}
               onVoiceMotion={(voiceMotion) => setView({ voiceMotion })}
+              referenceOn={referenceOn}
+              referenceName={referenceOn ? derived.referenceName : null}
+              onToggleReference={toggleReference}
+              onClearReference={clearReference}
             />
             {state.view.staff && (
               <ViewCard
@@ -541,6 +640,7 @@ export default function App() {
                   dimRest={state.view.voiceMotion}
                   soundingDegree={scaleSound?.degree ?? null}
                 />
+                {compareLegend}
               </ViewCard>
             )}
             {state.view.neck && (
@@ -616,13 +716,14 @@ export default function App() {
                 >
                   {tabExport}
                 </Fretboard>
+                {compareLegend}
               </ViewCard>
             )}
             {state.view.keyboard && (
               <ViewCard title="Keyboard" testId="keyboard-card">
                 <Keyboard
                   octaves={state.settings.keyboard.octaves}
-                  lowestMidi={state.settings.keyboard.lowestMidi}
+                  lowestMidi={keyboardLowest}
                   viewMode={legacy.viewMode}
                   compareEnabled={legacy.compareEnabled}
                   guidePcs={derived.guidePcs}
@@ -639,72 +740,9 @@ export default function App() {
                   showPlayed={legacy.showPlayedNotes}
                   playedMidis={held}
                 />
+                {compareLegend}
               </ViewCard>
             )}
-            <details className="legacy-controls">
-              <summary>Legacy controls (temporary)</summary>
-              <Controls
-                state={legacy}
-                mode={derived.mode}
-                compareFamily={derived.compareFamily}
-                compareMode={derived.compareMode}
-                shift={derived.shift}
-                onUpdate={noop}
-                onNumStrings={noop}
-                onPreset={noop}
-                onStringEdit={noop}
-                onToggleCompare={noop}
-                onCompareFamily={noop}
-                onComparePreset={noop}
-                npsShapes={derived.npsShapes}
-                cagedShapes={derived.cagedShapes}
-                onShape={noop}
-                referenceOn={referenceOn}
-                referenceName={derived.referenceName}
-                onToggleReference={toggleReference}
-                onClearReference={clearReference}
-              />
-              <ProgressionControls
-                rootPc={legacy.rootPc}
-                shift={derived.shift}
-                tuning={legacy.tuning}
-                fretCount={legacy.fretCount}
-                fretFrom={legacy.fretFrom}
-                fretTo={fretTo}
-                voicingStyle={legacy.voicingStyle}
-                voicingInversion={legacy.voicingInversion}
-                voicingWidth={legacy.voicingWidth}
-                voicingSetStart={legacy.voicingSetStart}
-                activeGrip={derived.shownVoicing?.notes ?? null}
-                active={legacy.viewMode === 'chord'}
-                activeChord={legacy.activeChord}
-                ghostScale={legacy.ghostScale}
-                onShowChord={noop}
-                onShowVoicing={noop}
-                onGhostScale={noop}
-                guideTones={legacy.guideTones}
-                onGuideTones={noop}
-                positionWindow={legacy.positionWindow}
-                session={session}
-                loadId={0}
-                onSessionChange={noop}
-              />
-              <MidiControls
-                rootPc={legacy.rootPc}
-                soundOctave={legacy.soundOctave}
-                onSoundOctave={noop}
-                drone={legacy.drone}
-                onDrone={noop}
-                clickToHear={legacy.clickToHear}
-                onClickToHear={noop}
-                midiInputName={legacy.midiInputName}
-                showPlayedNotes={legacy.showPlayedNotes}
-                soundPlayedNotes={legacy.soundPlayedNotes}
-                onMidiInputName={setMidiInput}
-                onShowPlayedNotes={noop}
-                onSoundPlayedNotes={noop}
-              />
-            </details>
           </div>
         </div>
       ) : (
@@ -774,10 +812,19 @@ export default function App() {
       <SettingsDrawer
         open={drawerOpen}
         onClose={closeDrawer}
-        startIn={state.settings.startIn}
-        myDefault={state.settings.myDefault}
+        state={state}
         onStartIn={setStartIn}
         onSetFromCurrent={setMyDefault}
+        onNumStrings={setNumStrings}
+        onPreset={setTuningPreset}
+        onStringPitch={setStringPitch}
+        onLeftHanded={setLeftHanded}
+        onNeck={setNeck}
+        onKeyboard={setKeyboard}
+        onSound={setSound}
+        onMidi={setMidi}
+        onWeights={setWeights}
+        onResetWeights={resetWeights}
       />
     </div>
   );

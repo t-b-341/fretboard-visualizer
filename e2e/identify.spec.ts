@@ -41,9 +41,10 @@ test('picking D, F# and A names D and adds it as a step', async ({ page }) => {
 test('held MIDI notes are named and added when nothing was clicked', async ({ page, context }) => {
   await fakeMidi(context);
   await openApp(page);
-  await page.getByText('Legacy controls (temporary)').click();
+  await page.getByTestId('settings-button').click();
   await page.getByRole('button', { name: /Enable MIDI/ }).click();
   await page.getByRole('combobox', { name: 'Input' }).selectOption({ label: 'Fake Keys' });
+  await page.keyboard.press('Escape');
   await page.getByTestId('identify-tool').click();
 
   const name = page.getByTestId('identify-primary').locator('.identify-name');

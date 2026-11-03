@@ -1,15 +1,17 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 export function AppHeader({
   tab,
   drawerOpen,
   settingsRef,
   onOpenSettings,
+  setups,
 }: {
   tab: 'workspace' | 'practice';
   drawerOpen: boolean;
   settingsRef: RefObject<HTMLButtonElement>;
   onOpenSettings: () => void;
+  setups: ReactNode;
 }) {
   return (
     <header className="app-header" data-testid="app-header">
@@ -22,9 +24,7 @@ export function AppHeader({
           Practice
         </a>
       </nav>
-      <button type="button" className="header-button" data-testid="setups-menu">
-        Setups
-      </button>
+      {setups}
       <button
         type="button"
         className="header-button"

@@ -1,9 +1,12 @@
 import type { Chord } from '../../music/chords';
+import type { NeckShape } from '../../music/shapes';
 import type { VoicingShape } from '../../music/voicingSet';
 import type { SuggestStyle } from '../../state/v2/suggest';
-import type { MaterialType, NameStyle, KeySelection, Step } from '../../state/v2/types';
+import type { AppStateV2, MaterialType, NameStyle, KeySelection, ScalePositions, Step } from '../../state/v2/types';
 import { AddChord } from './AddChord';
+import { ComparePanel } from './ComparePanel';
 import { KeyPanel } from './KeyPanel';
+import { ScalePositions as ScalePositionSection } from './ScalePositions';
 import { SuggestPanel } from './SuggestPanel';
 import { VoicingPanel } from './VoicingPanel';
 
@@ -41,6 +44,19 @@ export function MaterialPanel({
   onStringSet,
   onSmooth,
   onVoicingIndex,
+  compare,
+  intervals,
+  shift,
+  onCompare,
+  positions,
+  positionIndex,
+  fretRange,
+  perString,
+  npsShapes,
+  cagedShapes,
+  onPositions,
+  onPositionIndex,
+  onFretRange,
 }: {
   type: MaterialType;
   onType: (type: MaterialType) => void;
@@ -63,6 +79,19 @@ export function MaterialPanel({
   onStringSet: (stringSet: number) => void;
   onSmooth: (smooth: boolean) => void;
   onVoicingIndex: (index: number) => void;
+  compare: AppStateV2['material']['compare'];
+  intervals: number[];
+  shift: number;
+  onCompare: (compare: Partial<AppStateV2['material']['compare']>) => void;
+  positions: ScalePositions;
+  positionIndex: number;
+  fretRange: AppStateV2['material']['scale']['fretRange'];
+  perString: number;
+  npsShapes: NeckShape[];
+  cagedShapes: NeckShape[];
+  onPositions: (positions: ScalePositions) => void;
+  onPositionIndex: (index: number) => void;
+  onFretRange: (range: AppStateV2['material']['scale']['fretRange']) => void;
 }) {
   return (
     <aside className="material-panel" data-testid="material-panel">
@@ -107,16 +136,20 @@ export function MaterialPanel({
         onIndex={onVoicingIndex}
       />
 
-      <details className="compare-panel" data-testid="compare-panel">
-        <summary>
-          <h2>Compare with another scale</h2>
-        </summary>
-      </details>
+      <ComparePanel compare={compare} intervals={intervals} rootPc={selection.rootPc} shift={shift} onCompare={onCompare} />
 
       {type === 'scale' && (
-        <section data-testid="scale-positions">
-          <h2>Positions</h2>
-        </section>
+        <ScalePositionSection
+          positions={positions}
+          positionIndex={positionIndex}
+          fretRange={fretRange}
+          perString={perString}
+          npsShapes={npsShapes}
+          cagedShapes={cagedShapes}
+          onPositions={onPositions}
+          onPositionIndex={onPositionIndex}
+          onFretRange={onFretRange}
+        />
       )}
     </aside>
   );

@@ -67,6 +67,8 @@ export interface AppStateV2 {
       rootPc: number;
       familyKey: FamilyKey;
       modeKey: string;
+      /** Draw only the notes that belong to both scales. */
+      sharedOnly: boolean;
     };
     scale: {
       positions: ScalePositions;

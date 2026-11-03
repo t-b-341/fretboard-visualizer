@@ -65,7 +65,7 @@ describe('v2 url', () => {
     ];
     state.material.scale.positions = 'caged';
     state.material.scale.fretRange = { enabled: true, min: 2, max: 14 };
-    state.material.compare = { enabled: true, rootPc: 2, familyKey: 'melodicMinor', modeKey: 'Altered' };
+    state.material.compare = { enabled: true, rootPc: 2, familyKey: 'melodicMinor', modeKey: 'Altered', sharedOnly: true };
     state.view.labels = 'degrees';
     state.view.names = 'standard';
     state.view.keyboard = false;
@@ -77,7 +77,9 @@ describe('v2 url', () => {
     const expected = shared(state);
     expected.fretFrom = 0;
     expect(shared(back)).toEqual(expected);
-    expect(back.material.steps).toEqual([]);
+    expect(back.material.type).toBe('progression');
+    expect(back.material.steps).toHaveLength(1);
+    expect(back.material.steps[0].chord).toEqual(state.material.steps[0].chord);
     expect(back.material.scale.positions).toBe('all');
     expect(back.settings.sound.drone).toBe(false);
   });
@@ -134,7 +136,13 @@ describe('v2 url', () => {
     expect(back.material.type).toBe('scale');
     expect(back.material.steps).toEqual([]);
     expect(back.material.key).toEqual({ rootPc: 5, familyKey: 'harmonicMinor', modeKey: 'PhrygianDominant' });
-    expect(back.material.compare).toEqual({ enabled: true, rootPc: 2, familyKey: 'melodicMinor', modeKey: 'Altered' });
+    expect(back.material.compare).toEqual({
+      enabled: true,
+      rootPc: 2,
+      familyKey: 'melodicMinor',
+      modeKey: 'Altered',
+      sharedOnly: true,
+    });
     expect(back.material.scale.fretRange).toEqual({ enabled: true, min: 2, max: 14 });
     expect(back.view).toMatchObject({
       staff: true,

@@ -8,11 +8,20 @@ import { rerollChord } from '../../music/explain';
 import { mod } from '../../music/notes';
 import { mulberry32 } from '../../music/progression';
 import type { NoteQuizSettings } from '../../music/quiz';
+import { SCALE_FAMILIES, getFamily } from '../../music/scales';
+import type { FamilyKey } from '../../music/scales';
+import { defaultPresetForStrings, getPreset } from '../../music/tunings';
+import type { GuitarString } from '../../music/tunings';
+import { DEFAULT_WEIGHTS } from '../../music/voiceLeading';
+import type { Weights } from '../../music/voiceLeading';
+import { fitNoteQuiz } from '../appState';
+import { FRET_COUNT } from './defaults';
+import { clampKeyboardLowest } from './keyboardSpan';
 import { captureMyDefault } from './myDefault';
 import { resetState, saveLast, startState } from './storage';
 import { mergeSuggestion, modeIntervals, suggestChords, type SuggestStyle } from './suggest';
 import { readUrl } from './url';
-import type { AppStateV2, KeySelection, MaterialType, StartIn, Step } from './types';
+import type { AppStateV2, KeySelection, MaterialType, NumStrings, ScalePositions, StartIn, Step } from './types';
 
 export type AppAction =
   | { type: 'setMaterialType'; material: MaterialType }
@@ -35,6 +44,19 @@ export type AppAction =
   | { type: 'setMyDefault' }
   | { type: 'setTransport'; transport: Partial<AppStateV2['transport']> }
   | { type: 'setMidiInput'; name: string }
+  | { type: 'setNumStrings'; numStrings: NumStrings }
+  | { type: 'setTuningPreset'; id: string }
+  | { type: 'setStringPitch'; index: number; pc: number }
+  | { type: 'setLeftHanded'; leftHanded: boolean }
+  | { type: 'setNeck'; neck: Partial<AppStateV2['settings']['neck']> }
+  | { type: 'setKeyboard'; keyboard: Partial<AppStateV2['settings']['keyboard']> }
+  | { type: 'setSound'; sound: Partial<AppStateV2['settings']['sound']> }
+  | { type: 'setMidi'; midi: Partial<AppStateV2['settings']['midi']> }
+  | { type: 'setWeights'; weights: Weights }
+  | { type: 'resetWeights' }
+  | { type: 'setCompare'; compare: Partial<AppStateV2['material']['compare']> }
+  | { type: 'setScale'; scale: Partial<AppStateV2['material']['scale']> }
+  | { type: 'replace'; state: AppStateV2 }
   | { type: 'reset' };
 
 const VIEW_KEYS = [
@@ -163,6 +185,137 @@ function applyNoteQuiz(state: AppStateV2, settings: NoteQuizSettings): AppStateV
   return { ...state, practice: { ...practice, ...next, questionTypes: { ...next.questionTypes } } };
 }
 
+function sameTuning(a: readonly GuitarString[], b: readonly GuitarString[]): boolean {
+  return a.length === b.length && a.every((note, index) => note.pc === b[index].pc && note.octave === b[index].octave);
+}
+
+function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function clampHidden(hidden: readonly number[], numStrings: number): number[] {
+  const unique = [...new Set(hidden.filter((index) => Number.isInteger(index) && index >= 0 && index < numStrings))];
+  if (unique.length >= numStrings) return [];
+  return unique;
+}
+
+function clampPractice(practice: AppStateV2['practice'], numStrings: number): AppStateV2['practice'] {
+  const fitted = fitNoteQuiz(
+    {
+      enabled: false,
+      strings: [...practice.strings],
+      fretMin: practice.fretMin,
+      fretMax: practice.fretMax,
+      naturalsOnly: false,
+      keyContext: practice.spelling === 'key' ? 'key' : 'none',
+      types: {
+        nameNote: practice.questionTypes.nameNote,
+        findNote: practice.questionTypes.findNote,
+        intervalFromRoot: practice.questionTypes.intervalFromRoot,
+        earInterval: practice.questionTypes.earInterval,
+        chordTone: practice.questionTypes.chordTones,
+        readStaff: practice.questionTypes.readStaff,
+      },
+      harmonic: false,
+    },
+    numStrings,
+    FRET_COUNT,
+  );
+  if (
+    fitted.fretMin === practice.fretMin &&
+    fitted.fretMax === practice.fretMax &&
+    sameNumbers(fitted.strings, practice.strings)
+  ) {
+    return practice;
+  }
+  return { ...practice, strings: fitted.strings, fretMin: fitted.fretMin, fretMax: fitted.fretMax };
+}
+
+function clampFretRange(range: AppStateV2['material']['scale']['fretRange']): AppStateV2['material']['scale']['fretRange'] {
+  const min = Math.max(0, Math.min(FRET_COUNT, Math.round(range.min)));
+  const max = Math.max(min, Math.min(FRET_COUNT, Math.round(Number.isFinite(range.max) ? range.max : min)));
+  if (min === range.min && max === range.max) return range;
+  return { ...range, min, max };
+}
+
+/** New string count or tuning, with frets and string picks pulled back into range. */
+function retune(state: AppStateV2, numStrings: NumStrings, tuning: readonly GuitarString[]): AppStateV2 {
+  const notes = tuning.map((note) => ({ pc: mod(note.pc, 12), octave: note.octave }));
+  const hidden = clampHidden(state.settings.neck.hiddenStrings, numStrings);
+  const fretFrom = Math.max(0, Math.min(FRET_COUNT, Math.round(state.settings.neck.fretFrom)));
+  const fretTo = Math.max(fretFrom, Math.min(FRET_COUNT, Math.round(state.settings.neck.fretTo)));
+  const fretRange = clampFretRange(state.material.scale.fretRange);
+  const practice = clampPractice(state.practice, numStrings);
+  const stringSet = Math.max(0, Math.min(state.voicing.stringSet, Math.max(0, numStrings - 1)));
+  if (
+    numStrings === state.settings.instrument.numStrings &&
+    sameTuning(notes, state.settings.instrument.tuning) &&
+    sameNumbers(hidden, state.settings.neck.hiddenStrings) &&
+    fretFrom === state.settings.neck.fretFrom &&
+    fretTo === state.settings.neck.fretTo &&
+    fretRange === state.material.scale.fretRange &&
+    practice === state.practice &&
+    stringSet === state.voicing.stringSet
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    material: { ...state.material, scale: { ...state.material.scale, fretRange } },
+    voicing: stringSet === state.voicing.stringSet ? state.voicing : { ...state.voicing, stringSet },
+    settings: {
+      ...state.settings,
+      instrument: { ...state.settings.instrument, numStrings, tuning: notes },
+      neck: { fretFrom, fretTo, hiddenStrings: hidden },
+    },
+    practice,
+  };
+}
+
+function familyKeyOf(value: string | undefined, fallback: FamilyKey): FamilyKey {
+  if (value && SCALE_FAMILIES.some((family) => family.key === value)) return value as FamilyKey;
+  return fallback;
+}
+
+function finiteIn(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function cloneWeights(weights: Weights): Weights {
+  return {
+    roleMotion: {
+      root: finiteIn(weights.roleMotion.root, 0, 5, DEFAULT_WEIGHTS.roleMotion.root),
+      third: finiteIn(weights.roleMotion.third, 0, 5, DEFAULT_WEIGHTS.roleMotion.third),
+      fifth: finiteIn(weights.roleMotion.fifth, 0, 5, DEFAULT_WEIGHTS.roleMotion.fifth),
+      seventh: finiteIn(weights.roleMotion.seventh, 0, 5, DEFAULT_WEIGHTS.roleMotion.seventh),
+      ext: finiteIn(weights.roleMotion.ext, 0, 5, DEFAULT_WEIGHTS.roleMotion.ext),
+    },
+    handShift: finiteIn(weights.handShift, 0, 5, DEFAULT_WEIGHTS.handShift),
+    commonToneBonus: finiteIn(weights.commonToneBonus, 0, 5, DEFAULT_WEIGHTS.commonToneBonus),
+    resolutionBonus: finiteIn(weights.resolutionBonus, 0, 5, DEFAULT_WEIGHTS.resolutionBonus),
+    registerAnchor: finiteIn(weights.registerAnchor, 0, 5, DEFAULT_WEIGHTS.registerAnchor),
+    omissionPenalty: finiteIn(weights.omissionPenalty, 0, 20, DEFAULT_WEIGHTS.omissionPenalty),
+    anchorFret: finiteIn(weights.anchorFret, 0, 15, DEFAULT_WEIGHTS.anchorFret),
+  };
+}
+
+function sameWeights(a: Weights, b: Weights): boolean {
+  return (
+    a.handShift === b.handShift &&
+    a.commonToneBonus === b.commonToneBonus &&
+    a.resolutionBonus === b.resolutionBonus &&
+    a.registerAnchor === b.registerAnchor &&
+    a.omissionPenalty === b.omissionPenalty &&
+    a.anchorFret === b.anchorFret &&
+    a.roleMotion.root === b.roleMotion.root &&
+    a.roleMotion.third === b.roleMotion.third &&
+    a.roleMotion.fifth === b.roleMotion.fifth &&
+    a.roleMotion.seventh === b.roleMotion.seventh &&
+    a.roleMotion.ext === b.roleMotion.ext
+  );
+}
+
 export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
   switch (action.type) {
     case 'setMaterialType':
@@ -277,6 +430,166 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       if (inputName === state.settings.midi.inputName) return state;
       return { ...state, settings: { ...state.settings, midi: { ...state.settings.midi, inputName } } };
     }
+    case 'setNumStrings': {
+      if (state.settings.instrument.numStrings === action.numStrings) return state;
+      return retune(state, action.numStrings, defaultPresetForStrings(action.numStrings).notes);
+    }
+    case 'setTuningPreset': {
+      const preset = getPreset(action.id);
+      if (!preset || (preset.strings !== 6 && preset.strings !== 7 && preset.strings !== 8)) return state;
+      return retune(state, preset.strings, preset.notes);
+    }
+    case 'setStringPitch': {
+      const tuning = state.settings.instrument.tuning;
+      const current = tuning[action.index];
+      if (!current) return state;
+      const pc = mod(Math.round(action.pc), 12);
+      if (current.pc === pc) return state;
+      return retune(
+        state,
+        state.settings.instrument.numStrings,
+        tuning.map((note, index) => (index === action.index ? { ...note, pc } : note)),
+      );
+    }
+    case 'setLeftHanded':
+      if (state.settings.instrument.leftHanded === action.leftHanded) return state;
+      return {
+        ...state,
+        settings: {
+          ...state.settings,
+          instrument: { ...state.settings.instrument, leftHanded: action.leftHanded },
+        },
+      };
+    case 'setNeck': {
+      const neck = state.settings.neck;
+      const count = state.settings.instrument.numStrings;
+      let fretFrom = finiteIn(action.neck.fretFrom, 0, FRET_COUNT, neck.fretFrom);
+      let fretTo = finiteIn(action.neck.fretTo, 0, FRET_COUNT, neck.fretTo);
+      fretFrom = Math.round(fretFrom);
+      fretTo = Math.round(fretTo);
+      if (fretFrom > fretTo) {
+        if (action.neck.fretTo === undefined) fretFrom = fretTo;
+        else fretTo = fretFrom;
+      }
+      let hidden = neck.hiddenStrings;
+      if (action.neck.hiddenStrings) {
+        const next = clampHidden(action.neck.hiddenStrings, count);
+        if (next.length >= count) return state;
+        hidden = next;
+      }
+      if (fretFrom === neck.fretFrom && fretTo === neck.fretTo && sameNumbers(hidden, neck.hiddenStrings)) return state;
+      return { ...state, settings: { ...state.settings, neck: { fretFrom, fretTo, hiddenStrings: hidden } } };
+    }
+    case 'setKeyboard': {
+      const current = state.settings.keyboard;
+      const octaves = action.keyboard.octaves === 1 || action.keyboard.octaves === 2 || action.keyboard.octaves === 3
+        ? action.keyboard.octaves
+        : current.octaves;
+      const lowestMidi = clampKeyboardLowest(octaves, action.keyboard.lowestMidi ?? current.lowestMidi);
+      if (octaves === current.octaves && lowestMidi === current.lowestMidi) return state;
+      return { ...state, settings: { ...state.settings, keyboard: { octaves, lowestMidi } } };
+    }
+    case 'setSound': {
+      const current = state.settings.sound;
+      const beats = action.sound.beatsPerStep;
+      const sound: AppStateV2['settings']['sound'] = {
+        volume: finiteIn(action.sound.volume, 0, 1, current.volume),
+        muted: typeof action.sound.muted === 'boolean' ? action.sound.muted : current.muted,
+        drone: typeof action.sound.drone === 'boolean' ? action.sound.drone : current.drone,
+        clickToHear: typeof action.sound.clickToHear === 'boolean' ? action.sound.clickToHear : current.clickToHear,
+        octave: Math.round(finiteIn(action.sound.octave, 2, 6, current.octave)),
+        beatsPerStep: beats === 1 || beats === 2 || beats === 4 ? beats : current.beatsPerStep,
+      };
+      if (
+        sound.volume === current.volume &&
+        sound.muted === current.muted &&
+        sound.drone === current.drone &&
+        sound.clickToHear === current.clickToHear &&
+        sound.octave === current.octave &&
+        sound.beatsPerStep === current.beatsPerStep
+      ) {
+        return state;
+      }
+      return { ...state, settings: { ...state.settings, sound } };
+    }
+    case 'setMidi': {
+      const current = state.settings.midi;
+      const channel = action.midi.channel === undefined ? current.channel : Math.round(finiteIn(action.midi.channel, 1, 16, current.channel));
+      const outputName = action.midi.outputName === undefined ? current.outputName : action.midi.outputName.trim().slice(0, 128);
+      const inputName = action.midi.inputName === undefined ? current.inputName : action.midi.inputName.trim();
+      const showPlayed = typeof action.midi.showPlayed === 'boolean' ? action.midi.showPlayed : current.showPlayed;
+      const soundPlayed = typeof action.midi.soundPlayed === 'boolean' ? action.midi.soundPlayed : current.soundPlayed;
+      if (
+        channel === current.channel &&
+        outputName === current.outputName &&
+        inputName === current.inputName &&
+        showPlayed === current.showPlayed &&
+        soundPlayed === current.soundPlayed
+      ) {
+        return state;
+      }
+      return { ...state, settings: { ...state.settings, midi: { outputName, channel, inputName, showPlayed, soundPlayed } } };
+    }
+    case 'setWeights': {
+      const weights = cloneWeights(action.weights);
+      if (sameWeights(weights, state.settings.voiceLeadingWeights)) return state;
+      return { ...state, settings: { ...state.settings, voiceLeadingWeights: weights } };
+    }
+    case 'resetWeights': {
+      const weights = cloneWeights(DEFAULT_WEIGHTS);
+      if (sameWeights(weights, state.settings.voiceLeadingWeights)) return state;
+      return { ...state, settings: { ...state.settings, voiceLeadingWeights: weights } };
+    }
+    case 'setCompare': {
+      const current = state.material.compare;
+      const familyKey = familyKeyOf(action.compare.familyKey, current.familyKey);
+      const family = getFamily(familyKey);
+      const requested = action.compare.modeKey ?? current.modeKey;
+      const modeKey = family.modes.some((mode) => mode.key === requested) ? requested : family.modes[0].key;
+      const compare: AppStateV2['material']['compare'] = {
+        enabled: typeof action.compare.enabled === 'boolean' ? action.compare.enabled : current.enabled,
+        rootPc: mod(action.compare.rootPc ?? current.rootPc, 12),
+        familyKey,
+        modeKey,
+        sharedOnly: typeof action.compare.sharedOnly === 'boolean' ? action.compare.sharedOnly : current.sharedOnly,
+      };
+      if (
+        compare.enabled === current.enabled &&
+        compare.rootPc === current.rootPc &&
+        compare.familyKey === current.familyKey &&
+        compare.modeKey === current.modeKey &&
+        compare.sharedOnly === current.sharedOnly
+      ) {
+        return state;
+      }
+      return { ...state, material: { ...state.material, compare } };
+    }
+    case 'setScale': {
+      const current = state.material.scale;
+      const positions: ScalePositions =
+        action.scale.positions === 'all' || action.scale.positions === 'nps' || action.scale.positions === 'caged'
+          ? action.scale.positions
+          : current.positions;
+      const rawIndex = action.scale.positionIndex ?? (positions === 'all' ? 0 : current.positionIndex);
+      const positionIndex = Math.max(0, Math.min(24, Math.round(Number.isFinite(rawIndex) ? rawIndex : 0)));
+      const incoming = action.scale.fretRange ?? current.fretRange;
+      const min = Math.max(0, Math.min(FRET_COUNT, Math.round(finiteIn(incoming.min, 0, FRET_COUNT, current.fretRange.min))));
+      let max = Math.round(finiteIn(incoming.max, 0, FRET_COUNT, current.fretRange.max));
+      if (max < min) max = min;
+      const fretRange = { enabled: typeof incoming.enabled === 'boolean' ? incoming.enabled : current.fretRange.enabled, min, max };
+      if (
+        positions === current.positions &&
+        positionIndex === current.positionIndex &&
+        fretRange.enabled === current.fretRange.enabled &&
+        fretRange.min === current.fretRange.min &&
+        fretRange.max === current.fretRange.max
+      ) {
+        return state;
+      }
+      return { ...state, material: { ...state.material, scale: { positions, positionIndex, fretRange } } };
+    }
+    case 'replace':
+      return action.state;
     case 'setMyDefault': {
       const myDefault = captureMyDefault(state);
       const prev = state.settings.myDefault;
@@ -380,6 +693,28 @@ export function useAppV2() {
     dispatch({ type: 'setTransport', transport });
   }, []);
   const reset = useCallback(() => dispatch({ type: 'reset' }), []);
+  const setNumStrings = useCallback((numStrings: NumStrings) => dispatch({ type: 'setNumStrings', numStrings }), []);
+  const setTuningPreset = useCallback((id: string) => dispatch({ type: 'setTuningPreset', id }), []);
+  const setStringPitch = useCallback((index: number, pc: number) => dispatch({ type: 'setStringPitch', index, pc }), []);
+  const setLeftHanded = useCallback((leftHanded: boolean) => dispatch({ type: 'setLeftHanded', leftHanded }), []);
+  const setNeck = useCallback((neck: Partial<AppStateV2['settings']['neck']>) => dispatch({ type: 'setNeck', neck }), []);
+  const setKeyboard = useCallback(
+    (keyboard: Partial<AppStateV2['settings']['keyboard']>) => dispatch({ type: 'setKeyboard', keyboard }),
+    [],
+  );
+  const setSound = useCallback((sound: Partial<AppStateV2['settings']['sound']>) => dispatch({ type: 'setSound', sound }), []);
+  const setMidi = useCallback((midi: Partial<AppStateV2['settings']['midi']>) => dispatch({ type: 'setMidi', midi }), []);
+  const setWeights = useCallback((weights: Weights) => dispatch({ type: 'setWeights', weights }), []);
+  const resetWeights = useCallback(() => dispatch({ type: 'resetWeights' }), []);
+  const setCompare = useCallback(
+    (compare: Partial<AppStateV2['material']['compare']>) => dispatch({ type: 'setCompare', compare }),
+    [],
+  );
+  const setScale = useCallback(
+    (scale: Partial<AppStateV2['material']['scale']>) => dispatch({ type: 'setScale', scale }),
+    [],
+  );
+  const replaceState = useCallback((next: AppStateV2) => dispatch({ type: 'replace', state: next }), []);
 
   return {
     state,
@@ -405,5 +740,18 @@ export function useAppV2() {
     setMyDefault,
     setTransport,
     reset,
+    setNumStrings,
+    setTuningPreset,
+    setStringPitch,
+    setLeftHanded,
+    setNeck,
+    setKeyboard,
+    setSound,
+    setMidi,
+    setWeights,
+    resetWeights,
+    setCompare,
+    setScale,
+    replaceState,
   };
 }

@@ -162,9 +162,10 @@ test('reload on #practice stays on Practice with the same settings', async ({ pa
 test('a fake MIDI note answers a name question', async ({ page, context }) => {
   await fakeMidi(context);
   await openApp(page);
-  await page.getByText('Legacy controls (temporary)').click();
+  await page.getByTestId('settings-button').click();
   await page.getByRole('button', { name: /Enable MIDI/ }).click();
   await page.getByRole('combobox', { name: 'Input' }).selectOption({ label: 'Fake Keys' });
+  await page.keyboard.press('Escape');
   await page.getByTestId('tab-practice').click();
   await onlyTypes(page, ['Name the note']);
   const prompt = page.getByTestId('quiz-prompt');

@@ -1,6 +1,6 @@
 // Turns saved UI state into the scale, chord, spelling, highlight, and voicings the views draw.
 
-import type { ProgressionSnapshot } from '../components/ProgressionControls';
+import type { AppState, ProgressionSnapshot } from './appState';
 import {
   buildChord,
   chordInKey,
@@ -27,8 +27,6 @@ import { pitchSpelling, spellChordTone, spellScale } from '../music/spelling';
 import type { SpelledTone } from '../music/spelling';
 import { findVoicings, generateVoicings, selectVoicingTones, voicingBassRole } from '../music/voicings';
 import type { Voicing, VoicingStyle } from '../music/voicings';
-import type { AppState } from './appState';
-
 const INVERSIONS = ['Root position', '1st inversion', '2nd inversion', '3rd inversion'];
 
 export function selectScale(familyKey: FamilyKey, modeKey: string): {

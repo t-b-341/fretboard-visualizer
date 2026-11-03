@@ -5,7 +5,9 @@
 // Staff is written even when it is off. v1 treated "off" as the default and
 // omitted it; v2's default is on, so a missing flag would mean two things.
 
-import { buildChord, getDiatonicTriad } from '../../music/chords';
+import { buildChord, chordSymbol, getDiatonicTriad } from '../../music/chords';
+import { mod, noteName } from '../../music/notes';
+import { parseChordSymbol } from '../../music/parseChord';
 import { getFamily, parentScale } from '../../music/scales';
 import { TUNING_PRESETS } from '../../music/tunings';
 import type { GuitarString } from '../../music/tunings';
@@ -14,7 +16,7 @@ import type { AppState } from '../appState';
 import { decodeState, encodeState } from '../../urlState';
 import { FRET_COUNT, createDefaultV2 } from './defaults';
 import { migrateV1, normalizeV2 } from './migrate';
-import type { AppStateV2 } from './types';
+import type { AppStateV2, MaterialType, Step } from './types';
 
 function sameNotes(a: readonly GuitarString[], b: readonly GuitarString[]): boolean {
   return a.length === b.length && a.every((note, index) => note.pc === b[index].pc && note.octave === b[index].octave);
@@ -76,17 +78,52 @@ function toUrlApp(state: AppStateV2): AppState {
     compareRootPc: state.material.compare.rootPc,
     compareFamilyKey: state.material.compare.familyKey,
     compareModeKey: state.material.compare.modeKey,
+    sharedOnly: state.material.compare.sharedOnly,
     positionWindow: { ...state.material.scale.fretRange },
   };
 }
 
-/** Query string without a leading `?`. Only today's params are used. */
+const STEP_LIMIT = 32;
+
+function stepSymbol(step: Step): string {
+  const base = chordSymbol(step.chord);
+  if (step.bassPc === undefined || mod(step.bassPc, 12) === mod(step.chord.rootPc, 12)) return base;
+  return `${base}/${noteName(step.bassPc)}`;
+}
+
+function stepsFromParam(raw: string | null): Step[] | null {
+  if (raw == null || raw.trim() === '') return null;
+  const steps: Step[] = [];
+  for (const part of raw.split(',')) {
+    const parsed = parseChordSymbol(part);
+    if (!parsed) continue;
+    const step: Step = {
+      id: `step-${steps.length + 1}`,
+      chord: buildChord(parsed.rootPc, parsed.quality),
+      locked: false,
+      voicingIndex: 0,
+      source: 'manual',
+    };
+    if (parsed.bassPc !== undefined) step.bassPc = parsed.bassPc;
+    steps.push(step);
+    if (steps.length >= STEP_LIMIT) break;
+  }
+  return steps.length > 0 ? steps : null;
+}
+
+function materialTypeFrom(raw: string | null): MaterialType | null {
+  return raw === 'scale' || raw === 'chord' || raw === 'progression' ? raw : null;
+}
+
+/** Query string without a leading `?`. Only today's params are used, plus the step list. */
 export function writeUrl(state: AppStateV2): string {
   try {
     const clean = normalizeV2(state);
     const params = new URLSearchParams(encodeState(toUrlApp(clean), createInitialState()));
     params.set('sf', clean.view.staff ? '1' : '0');
     params.set('vm', clean.view.voiceMotion ? '1' : '0');
+    if (clean.material.type !== 'scale') params.set('mt', clean.material.type);
+    if (clean.material.steps.length > 0) params.set('st', clean.material.steps.map(stepSymbol).join(','));
     return params.toString();
   } catch {
     return '';
@@ -98,10 +135,26 @@ export function readUrl(search: string): AppStateV2 {
   try {
     const raw = (search.startsWith('?') ? search.slice(1) : search).split('#')[0] ?? '';
     if (raw.trim() === '') return createDefaultV2();
-    const state = migrateV1(decodeState(raw, createInitialState()));
-    const voiceMotion = new URLSearchParams(raw).get('vm');
+    let state = migrateV1(decodeState(raw, createInitialState()));
+    const params = new URLSearchParams(raw);
+    const voiceMotion = params.get('vm');
     if (voiceMotion === '1' || voiceMotion === '0') {
-      return { ...state, view: { ...state.view, voiceMotion: voiceMotion === '1' } };
+      state = { ...state, view: { ...state.view, voiceMotion: voiceMotion === '1' } };
+    }
+    const steps = stepsFromParam(params.get('st'));
+    const materialType = materialTypeFrom(params.get('mt'));
+    if (steps || materialType) {
+      const nextSteps = steps ?? state.material.steps;
+      const type = materialType ?? state.material.type;
+      state = {
+        ...state,
+        material: {
+          ...state.material,
+          type,
+          steps: nextSteps,
+          currentStep: nextSteps.length === 0 ? 0 : Math.min(state.material.currentStep, nextSteps.length - 1),
+        },
+      };
     }
     return state;
   } catch {

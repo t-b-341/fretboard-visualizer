@@ -114,7 +114,7 @@ export function toLegacy(state: AppStateV2): AppState {
     compareRootPc: state.material.compare.rootPc,
     compareFamilyKey: state.material.compare.familyKey,
     compareModeKey: state.material.compare.modeKey,
-    sharedOnly: false,
+    sharedOnly: state.material.compare.sharedOnly,
     positionWindow: { ...state.material.scale.fretRange },
     picked: {},
     quiz: { question: null, marks: {}, score: 0, total: 0 },

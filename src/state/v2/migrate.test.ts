@@ -150,7 +150,7 @@ describe('migrateV1', () => {
         compareFamilyKey: 'melodicMinor',
         compareModeKey: 'Altered',
       }).material.compare,
-    ).toEqual({ enabled: true, rootPc: 2, familyKey: 'melodicMinor', modeKey: 'Altered' });
+    ).toEqual({ enabled: true, rootPc: 2, familyKey: 'melodicMinor', modeKey: 'Altered', sharedOnly: false });
 
     expect(migrateV1({ chordDisplay: 'all', voicingStyle: 'drop2' }).voicing.shape).toBe('all');
 

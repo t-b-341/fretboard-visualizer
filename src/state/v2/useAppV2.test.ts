@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_WEIGHTS } from '../../music/voiceLeading';
 import { defaultNoteQuizSettings } from '../../music/quiz';
 import { createDefaultV2 } from './defaults';
 import { V2_STORAGE_KEY, loadLast } from './storage';
@@ -190,6 +191,44 @@ describe('reduceApp', () => {
     expect(reduceApp(createDefaultV2(), { type: 'replaceIdentified', chord: buildChord(0, 'maj'), bassPc: 0 })).toEqual(
       createDefaultV2(),
     );
+  });
+});
+
+describe('settings', () => {
+  it('re-clamps practice strings and frets when the instrument changes and keeps the key', () => {
+    const state = createDefaultV2();
+    const quiz = defaultNoteQuizSettings(8, 24);
+    quiz.strings = [0, 1, 2, 3, 4, 5, 6, 7];
+    quiz.fretMax = 30;
+    const quizzed = reduceApp(state, { type: 'setNoteQuiz', settings: quiz });
+    const eight = reduceApp(quizzed, { type: 'setNumStrings', numStrings: 8 });
+    expect(eight.settings.instrument.numStrings).toBe(8);
+    expect(eight.settings.instrument.tuning).toHaveLength(8);
+    expect(eight.material.key).toEqual(state.material.key);
+    expect(eight.practice.fretMax).toBe(24);
+    expect(eight.practice.strings).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    const hidden = reduceApp(eight, { type: 'setNeck', neck: { hiddenStrings: [5, 6, 7] } });
+    expect(hidden.settings.neck.hiddenStrings).toEqual([5, 6, 7]);
+
+    const six = reduceApp(hidden, { type: 'setNumStrings', numStrings: 6 });
+    expect(six.settings.instrument.numStrings).toBe(6);
+    expect(six.settings.instrument.tuning).toHaveLength(6);
+    expect(six.practice.strings).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(six.settings.neck.hiddenStrings).toEqual([5]);
+    expect(six.material.key).toEqual(state.material.key);
+    expect(reduceApp(six, { type: 'setNumStrings', numStrings: 6 })).toBe(six);
+  });
+
+  it('restores the voice-leading defaults', () => {
+    const state = createDefaultV2();
+    const changed = reduceApp(state, {
+      type: 'setWeights',
+      weights: { ...state.settings.voiceLeadingWeights, handShift: 3, roleMotion: { ...state.settings.voiceLeadingWeights.roleMotion } },
+    });
+    expect(changed.settings.voiceLeadingWeights.handShift).toBe(3);
+    const reset = reduceApp(changed, { type: 'resetWeights' });
+    expect(reset.settings.voiceLeadingWeights).toEqual(DEFAULT_WEIGHTS);
+    expect(reduceApp(reset, { type: 'resetWeights' })).toBe(reset);
   });
 });
 

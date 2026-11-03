@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildChord } from '../../music/chords';
 import { defaultProgression } from '../appState';
-import type { ProgressionSnapshot } from '../../components/ProgressionControls';
+import type { ProgressionSnapshot } from '../appState';
 import { deriveView } from '../derive';
 import { createDefaultV2 } from './defaults';
 import type { AppStateV2, Step } from './types';
