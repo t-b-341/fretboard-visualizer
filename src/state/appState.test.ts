@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildChord } from '../music/chords';
 import { defaultNoteQuizSettings } from '../music/quiz';
-import { createInitialState, mergeApp, mergeProgression, persistedApp } from './appState';
+import { createInitialState, defaultProgression, mergeApp, mergeProgression, persistedApp } from './appState';
+import { loadStore } from './setups';
 
 describe('mergeApp', () => {
   it('round-trips a full saved setup', () => {
@@ -98,6 +99,174 @@ describe('mergeApp', () => {
   it('rebuilds a saved chord from its quality key', () => {
     const loaded = mergeApp({ activeChord: { rootPc: 10, quality: '7' } });
     expect(loaded.activeChord).toEqual(buildChord(10, '7'));
+  });
+
+  it('tolerates missing and garbage fields and keeps valid ones', () => {
+    const fresh = createInitialState();
+    expect(mergeApp(undefined)).toEqual(fresh);
+    expect(mergeApp(null)).toEqual(fresh);
+    expect(mergeApp('not-json')).toEqual(fresh);
+    expect(mergeApp(4)).toEqual(fresh);
+
+    const fromArray = mergeApp([1, 'nope', null]);
+    expect(fromArray.viewMode).toBe('scale');
+    expect(fromArray.rootPc).toBe(fresh.rootPc);
+    expect(fromArray.fretFrom).toBe(0);
+    expect(fromArray.fretTo).toBe(fresh.fretCount);
+    expect(fromArray.tuning).toHaveLength(fresh.numStrings);
+
+    const loaded = mergeApp({
+      rootPc: 4,
+      familyKey: 'not-a-family',
+      modeKey: 'not-a-mode',
+      viewMode: 'full-scale',
+      numStrings: 9,
+      fretCount: 99,
+      fretFrom: -3,
+      fretTo: 2.2,
+      labelMode: 'transposed',
+      activeChord: { rootPc: 4 },
+      tuning: [{ pc: 0 }],
+      hiddenStrings: ['low', -1, 1, 1, 99],
+    });
+    expect(loaded.rootPc).toBe(4);
+    expect(loaded.familyKey).toBe(fresh.familyKey);
+    expect(loaded.modeKey).toBe(fresh.modeKey);
+    expect(loaded.viewMode).toBe('scale');
+    expect(loaded.numStrings).toBe(fresh.numStrings);
+    expect(loaded.fretCount).toBe(24);
+    expect(loaded.fretFrom).toBe(0);
+    expect(loaded.fretTo).toBe(2);
+    expect(loaded.labelMode).toBe('concert');
+    expect(loaded.activeChord).toBeNull();
+    expect(loaded.tuning).toEqual(fresh.tuning);
+    expect(loaded.hiddenStrings).toEqual([1]);
+
+    const kept = mergeApp({
+      viewMode: 'quiz',
+      rootPc: 'nope',
+      fretCount: 18,
+      fretFrom: 10,
+      fretTo: 4,
+    });
+    expect(kept.viewMode).toBe('quiz');
+    expect(kept.rootPc).toBe(fresh.rootPc);
+    expect(kept.fretCount).toBe(18);
+    expect(kept.fretFrom).toBe(10);
+    expect(kept.fretTo).toBe(10);
+  });
+});
+
+describe('fretboard-visualizer:setups:v1', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('loads a hand-written v1 setup to the state it was saved from', () => {
+    const savedFrom = {
+      ...createInitialState(),
+      rootPc: 2,
+      viewMode: 'chord' as const,
+      chordDisplay: 'voicing' as const,
+      fretFrom: 2,
+      fretTo: 14,
+      showStaff: true,
+      labelMode: 'standard' as const,
+      activeChord: buildChord(2, 'm7'),
+    };
+    const progressionFrom = {
+      ...defaultProgression(),
+      tempo: 88,
+      beatsPerChord: 4,
+      loop: false,
+      chords: [buildChord(2, 'm7'), buildChord(7, '7')],
+    };
+
+    // Written out the way setups.ts stores it under this key: version 1,
+    // a last session, and a named setup. The identify grip is in the blob
+    // and must not come back. Unknown keys are ignored.
+    const document = JSON.parse(`{
+      "version": 1,
+      "last": {
+        "app": {
+          "rootPc": 2,
+          "viewMode": "chord",
+          "chordDisplay": "voicing",
+          "fretFrom": 2,
+          "fretTo": 14,
+          "showStaff": true,
+          "labelMode": "standard",
+          "keyboardOctaves": 3,
+          "keyboardSpanChosen": true,
+          "activeChord": { "rootPc": 2, "quality": "m7" },
+          "picked": { "0": 4 },
+          "futureKnob": true
+        },
+        "progression": {
+          "tempo": 88,
+          "beatsPerChord": 4,
+          "loop": false,
+          "chords": [
+            { "rootPc": 2, "quality": "m7" },
+            { "rootPc": 7, "quality": "7" }
+          ]
+        }
+      },
+      "named": [
+        {
+          "id": "live-1",
+          "name": "D minor groove",
+          "savedAt": 1735689600000,
+          "app": {
+            "rootPc": 2,
+            "viewMode": "chord",
+            "chordDisplay": "voicing",
+            "fretFrom": 2,
+            "fretTo": 14,
+            "showStaff": true,
+            "labelMode": "standard",
+            "keyboardOctaves": 3,
+            "keyboardSpanChosen": true,
+            "activeChord": { "rootPc": 2, "quality": "m7" },
+            "picked": { "0": 4 }
+          },
+          "progression": {
+            "tempo": 88,
+            "beatsPerChord": 4,
+            "loop": false,
+            "chords": [
+              { "rootPc": 2, "quality": "m7" },
+              { "rootPc": 7, "quality": "7" }
+            ]
+          }
+        }
+      ]
+    }`);
+
+    const memory = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        memory.set(key, value);
+      },
+      removeItem: (key: string) => {
+        memory.delete(key);
+      },
+      clear: () => {
+        memory.clear();
+      },
+    });
+    localStorage.setItem('fretboard-visualizer:setups:v1', JSON.stringify(document));
+
+    const store = loadStore();
+    expect(store.version).toBe(1);
+    expect(store.named).toHaveLength(1);
+    expect(store.named[0].id).toBe('live-1');
+    expect(store.named[0].name).toBe('D minor groove');
+    expect(mergeApp(store.last?.app)).toEqual(savedFrom);
+    expect(mergeApp(store.named[0].app)).toEqual(savedFrom);
+    expect(mergeProgression(store.last?.progression)).toEqual(progressionFrom);
+    expect(mergeProgression(store.named[0].progression)).toEqual(progressionFrom);
   });
 });
 
