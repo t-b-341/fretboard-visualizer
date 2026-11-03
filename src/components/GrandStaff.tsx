@@ -30,6 +30,8 @@ interface Props {
   clickToHear: boolean;
   evaluate: (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null;
   onPlay: (midi: number) => void;
+  /** While interval reference is armed, a click sets or clears that pitch class. */
+  onReference?: (pc: number) => void;
 }
 
 const STEP = 6;
@@ -164,6 +166,7 @@ export function GrandStaff(props: Props) {
     clickToHear,
     evaluate,
     onPlay,
+    onReference,
   } = props;
 
   const layout = staffLayoutFor({
@@ -222,6 +225,10 @@ export function GrandStaff(props: Props) {
 
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);
+  };
+  const press = (midi: number) => {
+    onReference?.(mod(midi, 12));
+    play(midi);
   };
 
   const hint =
@@ -342,11 +349,14 @@ export function GrandStaff(props: Props) {
           const mark = octaveMark(note.octaveShift);
           const title = mark ? `${note.written.name}, ${mark}` : note.written.name;
           return (
-            <g key={`head-${note.written.name}-${index}-${note.midi}`} onClick={() => play(note.midi)}>
+            <g key={`head-${note.written.name}-${index}-${note.midi}`} onClick={() => press(note.midi)}>
               <title>{title}</title>
               <ellipse className={`${fill} staff-notehead`} cx={x} cy={y} rx={HEAD_RX} ry={HEAD_RY} transform={`rotate(-18 ${x} ${y})`} />
               {ev?.ring && (
                 <ellipse className="note-root-ring" cx={x} cy={y} rx={HEAD_RX + 3.2} ry={HEAD_RY + 2.4} transform={`rotate(-18 ${x} ${y})`} />
+              )}
+              {ev?.reference && (
+                <ellipse className="note-reference-ring" cx={x} cy={y} rx={HEAD_RX + 5.4} ry={HEAD_RY + 4} transform={`rotate(-18 ${x} ${y})`} />
               )}
               {ev?.outside && (
                 <ellipse className="note-outside-ring" cx={x} cy={y} rx={HEAD_RX + 3.2} ry={HEAD_RY + 2.4} transform={`rotate(-18 ${x} ${y})`} />

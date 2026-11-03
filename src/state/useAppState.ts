@@ -48,6 +48,10 @@ export function useAppState() {
     return next;
   });
   const [playbackVoicing, setPlaybackVoicing] = useState<Voicing | null>(null);
+  // Interval reference. Memory only: it is not part of AppState, so setups and
+  // the address bar never store it.
+  const [referenceOn, setReferenceOn] = useState(false);
+  const [referencePc, setReferencePc] = useState<number | null>(null);
   const [named, setNamed] = useState<NamedSetup[]>(boot.named);
   const [session, setSession] = useState<ProgressionSnapshot>(boot.progression);
   const [loadId, setLoadId] = useState(0);
@@ -59,6 +63,29 @@ export function useAppState() {
   const quizRnd = useRef<(() => number) | null>(null);
   if (quizRnd.current == null) quizRnd.current = mulberry32((Math.random() * 2 ** 32) >>> 0);
   const update = (patch: Partial<AppState>) => setState((s) => ({ ...s, ...patch }));
+
+  const clearReference = () => setReferencePc(null);
+  const toggleReference = (on: boolean) => {
+    setReferenceOn(on);
+    if (!on) setReferencePc(null);
+  };
+  const chooseReference = (pc: number) => {
+    const next = mod(pc, 12);
+    setReferencePc((current) => (current === next ? null : next));
+  };
+
+  useEffect(() => {
+    if (referencePc == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, textarea, select')) return;
+      event.preventDefault();
+      setReferencePc(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [referencePc]);
 
   const { intervals } = selectScale(state.familyKey, state.modeKey);
   const shift = labelShift(state.labelMode);
@@ -275,6 +302,8 @@ export function useAppState() {
     progRef.current = progression;
     setSession(progression);
     setLoadId((n) => n + 1);
+    setReferenceOn(false);
+    setReferencePc(null);
     setState(app);
   };
   const removeSetup = () => {
@@ -288,6 +317,8 @@ export function useAppState() {
     progRef.current = progression;
     setSession(progression);
     setLoadId((n) => n + 1);
+    setReferenceOn(false);
+    setReferencePc(null);
     setState(app);
     saveLast(app, progression);
   };
@@ -321,5 +352,10 @@ export function useAppState() {
     handleComparePreset,
     handleShape,
     nextQuiz,
+    referenceOn,
+    referencePc,
+    toggleReference,
+    chooseReference,
+    clearReference,
   };
 }

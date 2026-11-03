@@ -62,6 +62,8 @@ interface Props {
   onPick?: (stringIndex: number, fret: number) => void;
   /** Quiz view: answer the tone at this string and fret. */
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
+  /** While interval reference is armed, a click sets or clears that pitch class. */
+  onReference?: (pc: number) => void;
   /** Note quiz. Replaces ordinary highlighting for as long as it is set. */
   practice?: PracticeOverlay | null;
   /** MIDI notes held from an input, drawn at every position with that exact number. */
@@ -116,6 +118,7 @@ export function Fretboard(props: Props) {
     activeCells,
     onPick,
     onQuizAnswer,
+    onReference,
     evaluate,
     window: positionWindow,
     practice,
@@ -216,19 +219,21 @@ export function Fretboard(props: Props) {
 
   const activate = (stringIndex: number, fret: number, midi: number) => {
     if (picking) onPick(stringIndex, fret);
+    onReference?.(mod(midi, 12));
     play(midi);
   };
 
   const answerQuiz = (stringIndex: number, fret: number, pc: number, midi: number) => {
     if (positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max)) return;
     onQuizAnswer?.(stringIndex, fret, pc);
+    onReference?.(mod(midi, 12));
     play(midi);
   };
 
   const noteClass = (fret: number) => {
     const outside =
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
-    return [clickToHear || picking || quizzing ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
+    return [clickToHear || picking || quizzing || onReference ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
 
   return (
@@ -392,8 +397,16 @@ export function Fretboard(props: Props) {
               }
               if (ev.role === 'ghost') {
                 return (
-                  <g key={key} className={noteClass(cell.fret)} onClick={() => play(cell.midi)}>
+                  <g
+                    key={key}
+                    className={noteClass(cell.fret)}
+                    onClick={() => {
+                      onReference?.(mod(cell.midi, 12));
+                      play(cell.midi);
+                    }}
+                  >
                     <circle className="note-ghost" cx={x} cy={y} r={4.5} />
+                    {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={9} />}
                     {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
                     <PlayedMark x={x} y={y} on={played} />
                   </g>
@@ -403,6 +416,7 @@ export function Fretboard(props: Props) {
                 <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
+                  {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={R + 6} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
                   {ev.outside && <circle className="note-outside-ring" cx={x} cy={y} r={R + 3} />}
                   <PlayedMark x={x} y={y} on={played} />

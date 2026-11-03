@@ -15,6 +15,8 @@ interface Props {
   /** MIDI note of the lowest C. Octave 4 → 60, the same numbering as the sound bar. */
   lowestMidi: number;
   onPlay: (midi: number) => void;
+  /** While interval reference is armed, a click sets or clears that pitch class. */
+  onReference?: (pc: number) => void;
   /** Pitch-class highlight. A voicing already limits which chord tones are placed. */
   evaluate: (pc: number) => NoteHighlight | null;
   /** MIDI notes held from an input, drawn on the key with that exact number. */
@@ -62,6 +64,7 @@ export function Keyboard(props: Props) {
     clickToHear,
     lowestMidi,
     onPlay,
+    onReference,
     viewMode,
     compareEnabled,
     guidePcs,
@@ -72,6 +75,10 @@ export function Keyboard(props: Props) {
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);
+  };
+  const press = (midi: number) => {
+    onReference?.(midi % 12);
+    play(midi);
   };
   const keyWindow = keyboardWindow(octaves, lowestMidi);
   const guideByMidi = new Map(
@@ -112,12 +119,18 @@ export function Keyboard(props: Props) {
     const ev: NoteHighlight | undefined = guideByMidi.get(midi);
     if (!ev) return null;
     if (ev.role === 'ghost') {
-      return <circle key={key} className="note-ghost" cx={cx} cy={cy} r={4.5} />;
+      return (
+        <g key={key} className="key-dot">
+          <circle className="note-ghost" cx={cx} cy={cy} r={4.5} />
+          {ev.reference && <circle className="note-reference-ring" cx={cx} cy={cy} r={9} />}
+        </g>
+      );
     }
     return (
       <g key={key} className="key-dot">
         <circle className={noteFillClass(ev, degreeColors)} cx={cx} cy={cy} r={R} />
         {ev.ring && <circle className="note-root-ring" cx={cx} cy={cy} r={R + 3} />}
+        {ev.reference && <circle className="note-reference-ring" cx={cx} cy={cy} r={R + 6} />}
         {guidePcs?.has(midi % 12) && <circle className="note-guide-ring" cx={cx} cy={cy} r={R + 4} />}
         {ev.outside && <circle className="note-outside-ring" cx={cx} cy={cy} r={R + 3} />}
         <text
@@ -141,7 +154,7 @@ export function Keyboard(props: Props) {
         <p className="keyboard-caption">37 keys · {rangeLabel}</p>
       )}
       <svg
-        className={clickToHear ? 'keyboard keys-live' : 'keyboard'}
+        className={clickToHear || onReference ? 'keyboard keys-live' : 'keyboard'}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
@@ -158,7 +171,7 @@ export function Keyboard(props: Props) {
             width={WHITE_W}
             height={WHITE_H}
             rx={5}
-            onClick={() => play(midiFor(Math.floor(k.i / 7), k.pc))}
+            onClick={() => press(midiFor(Math.floor(k.i / 7), k.pc))}
           />
         ))}
 
@@ -172,7 +185,7 @@ export function Keyboard(props: Props) {
             width={BLACK_W}
             height={BLACK_H}
             rx={4}
-            onClick={() => play(midiFor(k.octave, k.pc))}
+            onClick={() => press(midiFor(k.octave, k.pc))}
           />
         ))}
 

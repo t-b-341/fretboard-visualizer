@@ -8,7 +8,9 @@
 import type { DisplayMode, ViewMode } from './types';
 import type { Chord, Triad } from './chords';
 import { chromaticDegreeLabel, mod, noteName } from './notes';
-import { scaleDegreeLabel } from './scales';
+import { scaleDegreeLabel, spelledDegreeLabel } from './scales';
+import { LETTERS, spellScale } from './spelling';
+import type { SpelledTone } from './spelling';
 
 export type Role =
   | 'root'
@@ -31,6 +33,8 @@ export interface NoteHighlight {
   degreeIndex?: number;
   /** Draw the gold "root" ring around the note. */
   ring?: boolean;
+  /** Draw the reference-note ring. This is not the gold root ring. */
+  reference?: boolean;
   /** Draw the dashed ring flagging a chord tone outside the overlaid scale. */
   outside?: boolean;
 }
@@ -56,6 +60,11 @@ export interface HighlightContext {
   identifyBassMidi?: number;
   /** Quiz view: "stringIndex:fret" cells already answered right or wrong. */
   quizMarks?: Record<string, 'right' | 'wrong'>;
+  /**
+   * Sounding pitch class labels are measured from. Null keeps the ordinary
+   * note or degree labels. Colors and which notes are drawn stay the same.
+   */
+  referencePc?: number | null;
   /**
    * Spelled names keyed by the displayed pitch class (concert pitch plus the
    * label shift). Scale tones first; chord tones the scale doesn't cover fill
@@ -90,7 +99,41 @@ export function createEvaluator(
     spelling,
     identifyBassMidi,
     quizMarks,
+    referencePc: referencePcRaw = null,
   } = ctx;
+
+  const referencePc = referencePcRaw == null ? null : mod(referencePcRaw, 12);
+  const spelledByPc = new Map<number, SpelledTone>();
+  const spelled = spellScale(rootPc, intervals);
+  if (spelled) {
+    for (const tone of spelled) {
+      if (!spelledByPc.has(tone.pc)) spelledByPc.set(tone.pc, tone);
+    }
+  }
+
+  const labelFromReference = (pc: number): string => {
+    const ref = referencePc ?? 0;
+    const target = mod(pc, 12);
+    const semis = mod(target - ref, 12);
+    const from = spelledByPc.get(ref);
+    const to = spelledByPc.get(target);
+    if (from && to) {
+      const fromLetter = LETTERS.indexOf(from.name[0] ?? '');
+      const toLetter = LETTERS.indexOf(to.name[0] ?? '');
+      if (fromLetter >= 0 && toLetter >= 0) {
+        return spelledDegreeLabel(mod(toLetter - fromLetter, 7), semis);
+      }
+    }
+    return chromaticDegreeLabel(semis);
+  };
+
+  const applyReference = (highlight: NoteHighlight | null, pc: number): NoteHighlight | null => {
+    if (!highlight || referencePc == null || viewMode === 'quiz') return highlight;
+    const isReference = mod(pc, 12) === referencePc;
+    const label = highlight.label ? labelFromReference(pc) : highlight.label;
+    if (!isReference && label === highlight.label) return highlight;
+    return isReference ? { ...highlight, label, reference: true } : { ...highlight, label };
+  };
 
   // Pre-map the active chord's pitch classes to their role and degree label.
   const chordRoleByPc = new Map<number, Role>();
@@ -105,7 +148,7 @@ export function createEvaluator(
     }
   }
 
-  return function evaluate(
+  function evaluateNote(
     pc: number,
     opts?: { placed?: boolean; midi?: number; cellKey?: string },
   ): NoteHighlight | null {
@@ -217,6 +260,13 @@ export function createEvaluator(
     if (chordRole) return decorate({ role: chordRole, label: labelFor() });
     if (inScale && ghostScale) return { role: 'ghost', label: '' };
     return null;
+  }
+
+  return function evaluate(
+    pc: number,
+    opts?: { placed?: boolean; midi?: number; cellKey?: string },
+  ): NoteHighlight | null {
+    return applyReference(evaluateNote(pc, opts), pc);
   };
 }
 

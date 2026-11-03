@@ -355,6 +355,36 @@ input:focus {
   stroke-width: 2.5;
   pointer-events: none;
 }
+.note-reference-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 4px 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.reference-chip-x {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.reference-chip-x:hover {
+  color: var(--text);
+}
 .played-mark {
   pointer-events: none;
 }
@@ -862,6 +892,7 @@ input:focus {
 .keyboard .note,
 .keyboard .note-ghost,
 .keyboard .note-root-ring,
+.keyboard .note-reference-ring,
 .keyboard .note-guide-ring,
 .keyboard .note-outside-ring,
 .keyboard .note-played,

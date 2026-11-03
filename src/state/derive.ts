@@ -333,7 +333,12 @@ function deriveReading(args: {
   };
 }
 
-export function deriveView(state: AppState, session: ProgressionSnapshot, playbackVoicing: Voicing | null) {
+export function deriveView(
+  state: AppState,
+  session: ProgressionSnapshot,
+  playbackVoicing: Voicing | null,
+  referencePc: number | null = null,
+) {
   const { family, mode, intervals } = selectScale(state.familyKey, state.modeKey);
   const { family: compareFamily, mode: compareMode, intervals: compareIntervals } = selectScale(
     state.compareFamilyKey,
@@ -417,7 +422,12 @@ export function deriveView(state: AppState, session: ProgressionSnapshot, playba
     compareRootPc: state.compareRootPc,
     sharedOnly: state.sharedOnly,
     spelling,
+    referencePc,
   };
+  const referenceName =
+    referencePc == null
+      ? null
+      : (spelling.get(mod(referencePc + shift, 12)) ?? noteName(mod(referencePc + shift, 12)));
   const evaluateFretboard = highlightEvaluator({
     ...highlightBase,
     identifyBassMidi: state.viewMode === 'identify' ? voicings.pickedNotes[0]?.midi : undefined,
@@ -454,6 +464,7 @@ export function deriveView(state: AppState, session: ProgressionSnapshot, playba
     keyboardLowestMidi,
     evaluateFretboard,
     evaluateKeyboard,
+    referenceName,
     ...voicings,
     ...reading,
   };

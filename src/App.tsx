@@ -57,11 +57,16 @@ export default function App() {
     handleComparePreset,
     handleShape,
     nextQuiz,
+    referenceOn,
+    referencePc,
+    toggleReference,
+    chooseReference,
+    clearReference,
   } = useAppState();
 
   const derived = useMemo(
-    () => deriveView(state, session, playbackVoicing),
-    [state, session, playbackVoicing],
+    () => deriveView(state, session, playbackVoicing, referenceOn ? referencePc : null),
+    [state, session, playbackVoicing, referenceOn, referencePc],
   );
   const held = useHeldNotes();
   const identifyNotes = useMemo(
@@ -135,6 +140,10 @@ export default function App() {
         onShape={(mode, index) => handleShape(mode, index, derived.npsShapes, derived.cagedShapes)}
         voicingCount={derived.voicingCount}
         voicingIndex={derived.voicingIndex}
+        referenceOn={referenceOn}
+        referenceName={derived.referenceName}
+        onToggleReference={toggleReference}
+        onClearReference={clearReference}
         onPlayVoicing={() => {
           if (!derived.selectedVoicing) return;
           player.playChord(
@@ -256,6 +265,7 @@ export default function App() {
                 : undefined
             }
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
             caption={null}
             practice={noteQuiz.practice}
             showPlayed={state.showPlayedNotes}
@@ -296,6 +306,7 @@ export default function App() {
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateKeyboard}
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
             showPlayed={state.showPlayedNotes}
             playedMidis={held}
           />
@@ -316,6 +327,7 @@ export default function App() {
             clickToHear={state.clickToHear}
             evaluate={derived.evaluateFretboard}
             onPlay={(midi) => player.playNote(midi, 420)}
+            onReference={referenceOn ? chooseReference : undefined}
           />
         )}
       </div>
