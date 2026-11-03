@@ -28,6 +28,10 @@ interface Props {
   /** MIDI notes held from an input, drawn on the key with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
+  /** While pick-notes is on, a click adds or removes this key. */
+  onIdentify?: (midi: number) => void;
+  /** Picked MIDI notes, drawn with an identify ring. */
+  identifyMidis?: ReadonlySet<number>;
 }
 
 const WHITE_W = 40;
@@ -80,12 +84,15 @@ export function Keyboard(props: Props) {
     soundingMidi = null,
     showPlayed = false,
     playedMidis = NO_PLAYED,
+    onIdentify,
+    identifyMidis,
   } = props;
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const play = (midi: number) => {
-    if (clickToHear) onPlay(midi);
+    if (clickToHear || onIdentify) onPlay(midi);
   };
   const press = (midi: number) => {
+    onIdentify?.(midi);
     onReference?.(midi % 12);
     play(midi);
   };
@@ -178,7 +185,7 @@ export function Keyboard(props: Props) {
         <p className="keyboard-caption">37 keys · {rangeLabel}</p>
       )}
       <svg
-        className={clickToHear || onReference ? 'keyboard keys-live' : 'keyboard'}
+        className={clickToHear || onReference || onIdentify ? 'keyboard keys-live' : 'keyboard'}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
@@ -244,6 +251,35 @@ export function Keyboard(props: Props) {
               cx={k.x + BLACK_W / 2}
               cy={blackDotY}
               r={R + 5}
+            />
+          );
+        })}
+
+        {whiteKeys.map((k) => {
+          const midi = midiFor(Math.floor(k.i / 7), k.pc);
+          if (!identifyMidis?.has(midi)) return null;
+          return (
+            <circle
+              key={`id-${k.i}`}
+              className="note-identify-ring"
+              data-identify="true"
+              cx={k.x + WHITE_W / 2}
+              cy={whiteDotY}
+              r={R + 6}
+            />
+          );
+        })}
+        {blackKeys.map((k) => {
+          const midi = midiFor(k.octave, k.pc);
+          if (!identifyMidis?.has(midi)) return null;
+          return (
+            <circle
+              key={`${k.key}-id`}
+              className="note-identify-ring"
+              data-identify="true"
+              cx={k.x + BLACK_W / 2}
+              cy={blackDotY}
+              r={R + 6}
             />
           );
         })}

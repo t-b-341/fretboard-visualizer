@@ -30,7 +30,7 @@ Right: main column, top to bottom
 1. Steps strip: one chip per step (symbol, roman numeral, function tag T/SD/D, locked state, colored by root degree; dashed border if borrowed, gray if outside the key). Controls: ‹ Prev, Play, Next ›, Tempo, Loop, Export (MIDI file, tab text, copy tab). Under the chips: "Why:" line for the current step and "Next:" line describing each voice's motion to the next step. Buttons: Lock/Unlock this step, Reroll this step, Remove. "+ Add step" at the end.
 2. View bar: checkboxes Staff, Neck, Keyboard (all on by default); Labels Notes|Degrees; Names Concert|Standard; "Intervals from…" (click a note to relabel everything as intervals from it; Escape clears); Show key (dim rest of the key); Voice motion (dashed rings and motion lines toward the next step).
 3. Staff card (on top): grand staff with every step as a measure, the current step highlighted. Toggle Concert | Written in the card header. Written follows the instrument: guitar on treble, 6-string bass on bass.
-4. Neck card: fretboard; "Pick notes (identify)" tool in the card header.
+4. Neck card: fretboard; "Pick notes (identify)" tool in the card header. While the tool is on, a result under the header names the chord: the chosen reading large (slash name, inversion, missing and extra tones) and up to two other readings smaller. Add as step appends that reading; Replace current step writes it over the selected step. Both leave the tool.
 5. Keyboard card.
 Each card shows a small legend of only what that card uses.
 

@@ -24,6 +24,8 @@ export type AppAction =
   | { type: 'prevStep' }
   | { type: 'nextStep' }
   | { type: 'addChord'; chord: Chord; bassPc?: number; id: string }
+  | { type: 'addIdentified'; chord: Chord; bassPc?: number; id: string }
+  | { type: 'replaceIdentified'; chord: Chord; bassPc?: number }
   | { type: 'removeStep'; index: number }
   | { type: 'toggleLock'; index: number }
   | { type: 'rerollStep'; index: number; seed: number }
@@ -32,6 +34,7 @@ export type AppAction =
   | { type: 'setStartIn'; startIn: StartIn }
   | { type: 'setMyDefault' }
   | { type: 'setTransport'; transport: Partial<AppStateV2['transport']> }
+  | { type: 'setMidiInput'; name: string }
   | { type: 'reset' };
 
 const VIEW_KEYS = [
@@ -60,6 +63,47 @@ function addChord(state: AppStateV2, chord: Chord, id: string, bassPc?: number):
   return {
     ...state,
     material: { ...state.material, type, steps, currentStep: steps.length - 1 },
+  };
+}
+
+/** One chord is Chord; two or more are a Progression. */
+function typeForCount(count: number): MaterialType {
+  return count <= 1 ? 'chord' : 'progression';
+}
+
+function identifiedStep(id: string, chord: Chord, bassPc: number | undefined, locked: boolean): Step {
+  const step: Step = { id, chord, locked, voicingIndex: 0, source: 'identified' };
+  if (bassPc !== undefined && mod(bassPc, 12) !== mod(chord.rootPc, 12)) step.bassPc = mod(bassPc, 12);
+  return step;
+}
+
+function addIdentified(state: AppStateV2, chord: Chord, id: string, bassPc?: number): AppStateV2 {
+  const steps = [...state.material.steps, identifiedStep(id, chord, bassPc, false)];
+  return {
+    ...state,
+    material: {
+      ...state.material,
+      type: typeForCount(steps.length),
+      steps,
+      currentStep: steps.length - 1,
+    },
+  };
+}
+
+function replaceIdentified(state: AppStateV2, chord: Chord, bassPc?: number): AppStateV2 {
+  const steps = state.material.steps;
+  if (steps.length === 0) return state;
+  const index = Math.min(Math.max(state.material.currentStep, 0), steps.length - 1);
+  const current = steps[index];
+  const next = identifiedStep(current.id, chord, bassPc, current.locked);
+  return {
+    ...state,
+    material: {
+      ...state.material,
+      type: typeForCount(steps.length),
+      steps: steps.map((step, item) => (item === index ? next : step)),
+      currentStep: index,
+    },
   };
 }
 
@@ -168,6 +212,10 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       return moveStep(state, state.material.currentStep + 1);
     case 'addChord':
       return addChord(state, action.chord, action.id, action.bassPc);
+    case 'addIdentified':
+      return addIdentified(state, action.chord, action.id, action.bassPc);
+    case 'replaceIdentified':
+      return replaceIdentified(state, action.chord, action.bassPc);
     case 'removeStep':
       return removeStep(state, action.index);
     case 'toggleLock': {
@@ -219,6 +267,11 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
       const loop = typeof action.transport.loop === 'boolean' ? action.transport.loop : state.transport.loop;
       if (tempo === state.transport.tempo && loop === state.transport.loop) return state;
       return { ...state, transport: { tempo, loop } };
+    }
+    case 'setMidiInput': {
+      const inputName = action.name.trim();
+      if (inputName === state.settings.midi.inputName) return state;
+      return { ...state, settings: { ...state.settings, midi: { ...state.settings.midi, inputName } } };
     }
     case 'setMyDefault': {
       const myDefault = captureMyDefault(state);
@@ -289,6 +342,15 @@ export function useAppV2() {
   const addChordToSteps = useCallback((chord: Chord, bassPc?: number) => {
     dispatch({ type: 'addChord', chord, bassPc, id: `step-${Math.random().toString(36).slice(2, 10)}` });
   }, []);
+  const addIdentifiedChord = useCallback((chord: Chord, bassPc?: number) => {
+    dispatch({ type: 'addIdentified', chord, bassPc, id: `step-${Math.random().toString(36).slice(2, 10)}` });
+  }, []);
+  const replaceIdentifiedChord = useCallback((chord: Chord, bassPc?: number) => {
+    dispatch({ type: 'replaceIdentified', chord, bassPc });
+  }, []);
+  const setMidiInput = useCallback((name: string) => {
+    dispatch({ type: 'setMidiInput', name });
+  }, []);
   const removeCurrent = useCallback((index: number) => dispatch({ type: 'removeStep', index }), []);
   const toggleLock = useCallback((index: number) => dispatch({ type: 'toggleLock', index }), []);
   const rerollCurrent = useCallback((index: number) => {
@@ -327,6 +389,9 @@ export function useAppV2() {
     prevStep,
     nextStep,
     addChord: addChordToSteps,
+    addIdentified: addIdentifiedChord,
+    replaceIdentified: replaceIdentifiedChord,
+    setMidiInput,
     removeStep: removeCurrent,
     toggleLock,
     rerollStep: rerollCurrent,

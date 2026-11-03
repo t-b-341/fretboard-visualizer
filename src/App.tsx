@@ -8,6 +8,8 @@ import { scaleUpAndDown, useTransportPlayback } from './audio/useTransport';
 import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
 import { GrandStaff } from './components/GrandStaff';
+import { IdentifyPanel, toggleKeyPick, toggleNeckPick } from './components/IdentifyPanel';
+import type { KeyPick, NeckPick } from './components/IdentifyPanel';
 import { Keyboard } from './components/Keyboard';
 import { AppHeader } from './components/layout/AppHeader';
 import { MaterialPanel } from './components/layout/MaterialPanel';
@@ -25,6 +27,7 @@ import { downloadBytes } from './components/layout/ExportMenu';
 import { formatVoiceMotion, linkVoices, nextStepIndex } from './music/voiceMotion';
 import type { MotionPoint } from './music/voiceMotion';
 import { chordSymbol } from './music/chords';
+import { candidateLabel, heldChordNotes, identifyChord } from './music/identify';
 import { keyLabel } from './music/keyLabel';
 import type { ChordToneRole } from './music/chords';
 import { mod, noteName } from './music/notes';
@@ -58,10 +61,14 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault, setTransport } =
+  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, addIdentified, replaceIdentified, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault, setTransport, setMidiInput } =
     useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [identifyOn, setIdentifyOn] = useState(false);
+  const [neckPicks, setNeckPicks] = useState<NeckPick[]>([]);
+  const [keyPicks, setKeyPicks] = useState<KeyPick[]>([]);
+  const [identifyChoice, setIdentifyChoice] = useState({ key: '', index: 0 });
   const settingsRef = useRef<HTMLButtonElement>(null);
   const [referenceOn, setReferenceOn] = useState(false);
   const [referencePc, setReferencePc] = useState<number | null>(null);
@@ -105,6 +112,53 @@ export default function App() {
     [legacy, session, shownVoicing, referenceOn, referencePc],
   );
   const held = useHeldNotes();
+  const identifyPicked = useMemo(
+    () => [...neckPicks.map(({ pc, midi }) => ({ pc, midi })), ...keyPicks],
+    [neckPicks, keyPicks],
+  );
+  const identifyNotes = useMemo(
+    () => (identifyOn ? heldChordNotes(identifyPicked, held) : []),
+    [identifyOn, identifyPicked, held],
+  );
+  const identifyCandidates = useMemo(
+    () => (identifyOn ? identifyChord(identifyNotes) : []),
+    [identifyOn, identifyNotes],
+  );
+  const identifyKey = identifyNotes.map((note) => note.midi).join(',');
+  const identifyIndex =
+    identifyCandidates.length === 0
+      ? 0
+      : identifyChoice.key === identifyKey
+        ? Math.min(identifyChoice.index, identifyCandidates.length - 1)
+        : 0;
+  const identified = identifyCandidates[identifyIndex] ?? null;
+  const identifyAlts = identifyCandidates
+    .map((candidate, index) => ({ candidate, index }))
+    .filter((item) => item.index !== identifyIndex)
+    .slice(0, 2);
+  const identifyCells = useMemo(
+    () => new Set(neckPicks.map((pick) => `${pick.stringIndex}:${pick.fret}`)),
+    [neckPicks],
+  );
+  const identifyKeyMidis = useMemo(() => new Set(keyPicks.map((pick) => pick.midi)), [keyPicks]);
+  const pickedRingMidis = useMemo(() => {
+    const midis = new Set<number>();
+    for (const pick of neckPicks) midis.add(pick.midi);
+    for (const pick of keyPicks) midis.add(pick.midi);
+    return midis;
+  }, [neckPicks, keyPicks]);
+  const leaveIdentify = useCallback(() => {
+    setIdentifyOn(false);
+    setNeckPicks([]);
+    setKeyPicks([]);
+    setIdentifyChoice({ key: '', index: 0 });
+  }, []);
+  const commitIdentified = (mode: 'add' | 'replace') => {
+    if (!identified) return;
+    if (mode === 'add') addIdentified(identified.chord, identified.bassPc);
+    else replaceIdentified(identified.chord, identified.bassPc);
+    leaveIdentify();
+  };
   const quizSettings = useMemo<NoteQuizSettings>(
     () => ({
       ...legacy.noteQuiz,
@@ -155,6 +209,19 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [referencePc]);
+
+  useEffect(() => {
+    if (!identifyOn) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('button, input, textarea, select')) return;
+      event.preventDefault();
+      leaveIdentify();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [identifyOn, leaveIdentify]);
 
   const answerPlayed = noteQuiz.answerPlayed;
   const seenHeld = useRef<ReadonlySet<number> | null>(null);
@@ -450,6 +517,14 @@ export default function App() {
                   measures={staffMeasures}
                   currentMeasure={stepIndex}
                   onSelectMeasure={setCurrentStep}
+                  identify={
+                    identifyOn
+                      ? {
+                          midis: identifyNotes.map((note) => note.midi),
+                          symbol: identified ? candidateLabel(identified, derived.shift) : '',
+                        }
+                      : null
+                  }
                   scaleLabel={keyLabel(state.material.key.rootPc, state.material.key.modeKey, derived.shift)}
                   dimRest={state.view.voiceMotion}
                   soundingDegree={scaleSound?.degree ?? null}
@@ -457,7 +532,36 @@ export default function App() {
               </ViewCard>
             )}
             {state.view.neck && (
-              <ViewCard title="Neck" testId="neck-card">
+              <ViewCard
+                title="Neck"
+                testId="neck-card"
+                extra={
+                  <div className="segmented">
+                    <button
+                      type="button"
+                      className={identifyOn ? 'identify-toggle active' : 'identify-toggle'}
+                      data-testid="identify-tool"
+                      aria-pressed={identifyOn}
+                      onClick={() => (identifyOn ? leaveIdentify() : setIdentifyOn(true))}
+                    >
+                      Pick notes (identify)
+                    </button>
+                  </div>
+                }
+              >
+                {identifyOn && (
+                  <IdentifyPanel
+                    chosen={identified}
+                    chosenIndex={identifyIndex}
+                    alternatives={identifyAlts}
+                    distinct={new Set(identifyNotes.map((note) => note.pc)).size}
+                    shift={derived.shift}
+                    canReplace={state.material.steps.length > 0}
+                    onChoose={(index) => setIdentifyChoice({ key: identifyKey, index })}
+                    onAdd={() => commitIdentified('add')}
+                    onReplace={() => commitIdentified('replace')}
+                  />
+                )}
                 <Fretboard
                   grid={derived.grid}
                   tuning={legacy.tuning}
@@ -484,6 +588,14 @@ export default function App() {
                   }
                   onPlay={onPlay}
                   onReference={referenceOn ? chooseReference : undefined}
+                  onPick={
+                    identifyOn
+                      ? (stringIndex, fret, pc, midi) =>
+                          setNeckPicks((picks) => toggleNeckPick(picks, { stringIndex, fret, pc, midi }))
+                      : undefined
+                  }
+                  identifyCells={identifyOn ? identifyCells : undefined}
+                  identifyMidis={identifyOn ? identifyKeyMidis : undefined}
                   caption={null}
                   showPlayed={legacy.showPlayedNotes}
                   playedMidis={held}
@@ -510,6 +622,8 @@ export default function App() {
                   soundingMidi={scaleSound?.midi ?? null}
                   onPlay={onPlay}
                   onReference={referenceOn ? chooseReference : undefined}
+                  onIdentify={identifyOn ? (midi) => setKeyPicks((picks) => toggleKeyPick(picks, midi)) : undefined}
+                  identifyMidis={identifyOn ? pickedRingMidis : undefined}
                   showPlayed={legacy.showPlayedNotes}
                   playedMidis={held}
                 />
@@ -562,8 +676,6 @@ export default function App() {
                 session={session}
                 loadId={0}
                 onSessionChange={noop}
-                identifyOn={false}
-                onToggleIdentify={noop}
               />
               <MidiControls
                 rootPc={legacy.rootPc}
@@ -576,7 +688,7 @@ export default function App() {
                 midiInputName={legacy.midiInputName}
                 showPlayedNotes={legacy.showPlayedNotes}
                 soundPlayedNotes={legacy.soundPlayedNotes}
-                onMidiInputName={noop}
+                onMidiInputName={setMidiInput}
                 onShowPlayedNotes={noop}
                 onSoundPlayedNotes={noop}
               />

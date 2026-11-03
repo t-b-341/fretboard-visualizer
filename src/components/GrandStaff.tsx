@@ -57,6 +57,11 @@ interface Props {
   dimRest?: boolean;
   /** Index of the written scale note that is sounding. */
   soundingDegree?: number | null;
+  /**
+   * While pick-notes is on, the current measure stacks these notes.
+   * Null leaves the measure alone.
+   */
+  identify?: { midis: readonly number[]; symbol: string } | null;
 }
 
 const STEP = 6;
@@ -322,11 +327,13 @@ export function GrandStaff(props: Props) {
     scaleLabel = '',
     dimRest = false,
     soundingDegree = null,
+    identify = null,
   } = props;
 
   const narrow = useNarrowScreen();
   const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
   const stepped = !!(measures && measures.length > 0 && (viewMode === 'chord' || viewMode === 'triad'));
+  const identifying = identify != null;
   const source = {
     viewMode,
     rootPc,
@@ -337,24 +344,46 @@ export function GrandStaff(props: Props) {
   };
 
   const drawn: DrawnMeasure[] = stepped
-    ? measures.map((measure, index) => ({
-        index,
-        symbol: measure.symbol,
-        current: index === Math.min(Math.max(currentMeasure, 0), measures.length - 1),
-        layout: staffLayoutFor({
-          ...source,
-          viewMode: viewMode === 'triad' ? 'triad' : 'chord',
-          chord: measure.chord,
-          voicingMidis: measure.voicingMidis,
-          pickedMidis: [],
-        }),
-      }))
+    ? measures.map((measure, index) => {
+        const current = index === Math.min(Math.max(currentMeasure, 0), measures.length - 1);
+        const picked = identifying && current;
+        return {
+          index,
+          symbol: picked ? identify.symbol : measure.symbol,
+          current,
+          layout: staffLayoutFor(
+            picked
+              ? {
+                  ...source,
+                  viewMode: 'identify',
+                  pickedMidis: identify.midis,
+                  chord: measure.chord,
+                  voicingMidis: null,
+                }
+              : {
+                  ...source,
+                  viewMode: viewMode === 'triad' ? 'triad' : 'chord',
+                  chord: measure.chord,
+                  voicingMidis: measure.voicingMidis,
+                  pickedMidis: [],
+                },
+          ),
+        };
+      })
     : [
         {
           index: 0,
-          symbol: viewMode === 'scale' ? scaleLabel : '',
+          symbol: identifying ? identify.symbol : viewMode === 'scale' ? scaleLabel : '',
           current: true,
-          layout: staffLayoutFor({ ...source, chord, voicingMidis }),
+          layout: identifying
+            ? staffLayoutFor({
+                ...source,
+                viewMode: 'identify',
+                pickedMidis: identify.midis,
+                chord,
+                voicingMidis: null,
+              })
+            : staffLayoutFor({ ...source, chord, voicingMidis }),
         },
       ];
 
@@ -387,11 +416,13 @@ export function GrandStaff(props: Props) {
 
   const hint =
     drawn.every((measure) => measure.layout.notes.length === 0)
-      ? viewMode === 'chord' || viewMode === 'triad'
-        ? 'Choose a chord and it stacks on the staff.'
-        : viewMode === 'identify'
-          ? 'Pick notes on the neck and they stack here.'
-          : null
+      ? identifying
+        ? 'Pick notes on the neck and they stack here.'
+        : viewMode === 'chord' || viewMode === 'triad'
+          ? 'Choose a chord and it stacks on the staff.'
+          : viewMode === 'identify'
+            ? 'Pick notes on the neck and they stack here.'
+            : null
       : null;
 
   return (

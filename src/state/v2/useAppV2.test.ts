@@ -156,6 +156,39 @@ describe('reduceApp', () => {
     expect(rerolled.material.steps[1]).toBe(suggested.material.steps[1]);
     expect(rerolled.material.steps[0].chord).not.toEqual(suggested.material.steps[0].chord);
   });
+
+  it('adds an identified chord as the step it names, and can replace the current one', () => {
+    const state = createDefaultV2();
+    const added = reduceApp(state, { type: 'addIdentified', chord: buildChord(2, 'maj'), bassPc: 2, id: 'd' });
+    expect(added.material.type).toBe('chord');
+    expect(added.material.currentStep).toBe(0);
+    expect(added.material.steps).toHaveLength(1);
+    expect(added.material.steps[0].source).toBe('identified');
+    expect(added.material.steps[0].bassPc).toBeUndefined();
+    expect(added.material.steps[0].chord.rootPc).toBe(2);
+    expect(state.material.type).toBe('scale');
+    expect(state.material.steps).toHaveLength(0);
+
+    const slash = reduceApp(added, { type: 'addIdentified', chord: buildChord(9, 'm7'), bassPc: 0, id: 'am' });
+    expect(slash.material.type).toBe('progression');
+    expect(slash.material.currentStep).toBe(1);
+    expect(slash.material.steps[1].source).toBe('identified');
+    expect(slash.material.steps[1].bassPc).toBe(0);
+    expect(slash.material.steps[0]).toBe(added.material.steps[0]);
+
+    const replaced = reduceApp(slash, { type: 'replaceIdentified', chord: buildChord(0, 'maj'), bassPc: 4 });
+    expect(replaced.material.type).toBe('progression');
+    expect(replaced.material.steps).toHaveLength(2);
+    expect(replaced.material.currentStep).toBe(1);
+    expect(replaced.material.steps[1].chord.rootPc).toBe(0);
+    expect(replaced.material.steps[1].bassPc).toBe(4);
+    expect(replaced.material.steps[1].source).toBe('identified');
+    expect(replaced.material.steps[1].id).toBe('am');
+    expect(replaced.material.steps[0]).toBe(slash.material.steps[0]);
+    expect(reduceApp(createDefaultV2(), { type: 'replaceIdentified', chord: buildChord(0, 'maj'), bassPc: 0 })).toEqual(
+      createDefaultV2(),
+    );
+  });
 });
 
 describe('scheduleLastSave', () => {

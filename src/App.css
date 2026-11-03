@@ -363,6 +363,12 @@ input:focus {
   stroke-width: 2.5;
   pointer-events: none;
 }
+.note-identify-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  pointer-events: none;
+}
 .note-reference-ring {
   fill: none;
   stroke: var(--accent);
@@ -622,11 +628,42 @@ input:focus {
   align-items: baseline;
   gap: 6px 12px;
 }
+.identify-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 8px;
+  min-height: 36px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.identify-choice:hover,
+.identify-choice:focus-visible {
+  border-color: var(--border);
+  background: var(--panel-2);
+}
 .identify-name {
   font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1.1;
+}
+.identify-choice.is-alt .identify-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.identify-choice.is-alt .identify-detail {
+  font-size: 0.85rem;
 }
 .identify-detail {
   font-size: 0.92rem;
@@ -644,6 +681,15 @@ input:focus {
 .identify-actions {
   display: flex;
   gap: 6px;
+}
+.identify-actions .btn-mini {
+  min-height: 36px;
+}
+.view-card .identify-panel {
+  margin: 0 0 12px;
+}
+.segmented button.identify-toggle {
+  min-height: 36px;
 }
 
 .quiz-panel {

@@ -44,8 +44,6 @@ interface Props {
   session: ProgressionSnapshot;
   loadId: number;
   onSessionChange: (snap: ProgressionSnapshot) => void;
-  identifyOn: boolean;
-  onToggleIdentify: () => void;
 }
 
 export interface ProgressionSnapshot {
@@ -104,8 +102,6 @@ export function ProgressionControls(props: Props) {
     session,
     loadId,
     onSessionChange,
-    identifyOn,
-    onToggleIdentify,
   } = props;
 
   const [, setTick] = useState(0);
@@ -196,14 +192,6 @@ export function ProgressionControls(props: Props) {
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          className={identifyOn ? 'btn-mini active' : 'btn-mini'}
-          aria-pressed={identifyOn}
-          onClick={onToggleIdentify}
-        >
-          Identify
-        </button>
       </div>
       <details className="vl-weights">
         <summary>Voice leading weights</summary>
