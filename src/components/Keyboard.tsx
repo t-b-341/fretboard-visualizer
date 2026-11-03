@@ -21,6 +21,10 @@ interface Props {
   evaluate: (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null;
   /** Exact keys of the current voicing. Omit to light every matching pitch class. */
   voicingMidis?: readonly number[] | null;
+  /** MIDI notes in the next step that the current step does not already hold. */
+  addedMidis?: readonly number[] | null;
+  /** The scale note sounding right now. */
+  soundingMidi?: number | null;
   /** MIDI notes held from an input, drawn on the key with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
@@ -72,6 +76,8 @@ export function Keyboard(props: Props) {
     guidePcs,
     evaluate,
     voicingMidis = null,
+    addedMidis = null,
+    soundingMidi = null,
     showPlayed = false,
     playedMidis = NO_PLAYED,
   } = props;
@@ -85,6 +91,7 @@ export function Keyboard(props: Props) {
   };
   const keyWindow = keyboardWindow(octaves, lowestMidi);
   const placed = voicingMidis ? new Set(voicingMidis) : null;
+  const added = addedMidis ? new Set(addedMidis) : null;
   const guideByMidi = new Map<number, NoteHighlight>();
   const top = keyWindow.lowest + keyWindow.keyCount;
   for (let midi = keyWindow.lowest; midi < top; midi++) {
@@ -137,8 +144,15 @@ export function Keyboard(props: Props) {
       );
     }
     return (
-      <g key={key} className="key-dot" data-midi={midi}>
+      <g
+        key={key}
+        className="key-dot"
+        data-midi={midi}
+        data-sounding={soundingMidi === midi ? 'true' : undefined}
+      >
         <circle className={noteFillClass(ev, degreeColors)} cx={cx} cy={cy} r={R} />
+        {soundingMidi === midi && <circle className="note-sounding" cx={cx} cy={cy} r={R + 5} />}
+        {added?.has(midi) && <circle className="motion-ring" cx={cx} cy={cy} r={R + 5} />}
         {ev.ring && <circle className="note-root-ring" cx={cx} cy={cy} r={R + 3} />}
         {ev.reference && <circle className="note-reference-ring" cx={cx} cy={cy} r={R + 6} />}
         {guidePcs?.has(midi % 12) && <circle className="note-guide-ring" cx={cx} cy={cy} r={R + 4} />}
@@ -206,6 +220,33 @@ export function Keyboard(props: Props) {
         {blackKeys.map((k) =>
           renderDot(`${k.key}-dot`, k.x + BLACK_W / 2, blackDotY, midiFor(k.octave, k.pc)),
         )}
+
+        {whiteKeys.map((k) => {
+          const midi = midiFor(Math.floor(k.i / 7), k.pc);
+          if (!added?.has(midi) || guideByMidi.has(midi)) return null;
+          return (
+            <circle
+              key={`add-${k.i}`}
+              className="motion-ring"
+              cx={k.x + WHITE_W / 2}
+              cy={whiteDotY}
+              r={R + 5}
+            />
+          );
+        })}
+        {blackKeys.map((k) => {
+          const midi = midiFor(k.octave, k.pc);
+          if (!added?.has(midi) || guideByMidi.has(midi)) return null;
+          return (
+            <circle
+              key={`${k.key}-add`}
+              className="motion-ring"
+              cx={k.x + BLACK_W / 2}
+              cy={blackDotY}
+              r={R + 5}
+            />
+          );
+        })}
 
         {showPlayed &&
           whiteKeys.map((k) => (

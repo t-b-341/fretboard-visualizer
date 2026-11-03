@@ -41,8 +41,7 @@ test('installs a fake MIDI input named Fake Keys', async ({ page, context }) => 
 test('records oscillator starts when a scale is played', async ({ page, context }) => {
   await recordSynth(context);
   await openApp(page);
-  await page.getByText('Legacy controls (temporary)').click();
-  await page.getByRole('button', { name: /Play scale/ }).click();
+  await page.getByTestId('transport').getByRole('button', { name: 'Play' }).click();
   await expect.poll(async () => page.evaluate(() => window.__played ?? [])).not.toEqual([]);
   const played = await page.evaluate(() => window.__played);
   expect(played.every((freq) => freq > 0)).toBe(true);

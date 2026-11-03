@@ -32,6 +32,13 @@ interface Props {
   onPlay: (midi: number) => void;
   /** While interval reference is armed, a click sets or clears that pitch class. */
   onReference?: (pc: number) => void;
+  /** Every step, when the staff should show one measure per step. */
+  measures?: { chord: Chord; voicingMidis: number[] | null }[] | null;
+  currentMeasure?: number;
+  /** Dim every measure except the current one. */
+  dimRest?: boolean;
+  /** Index of the written scale note that is sounding. */
+  soundingDegree?: number | null;
 }
 
 const STEP = 6;
@@ -152,6 +159,223 @@ function StaffLines({ bottom, x1, x2, yOf }: { bottom: number; x1: number; x2: n
   );
 }
 
+function chordRole(chord: Chord, midi: number): string {
+  const pc = mod(midi, 12);
+  for (const tone of chord.tones) {
+    if (mod(chord.rootPc + tone.interval, 12) === pc) return tone.role;
+  }
+  return 'scale';
+}
+
+function MeasuresStaff({
+  measures,
+  currentMeasure,
+  dimRest,
+  viewMode,
+  rootPc,
+  intervals,
+  guitarWritten,
+  clickToHear,
+  evaluate,
+  onPress,
+}: {
+  measures: { chord: Chord; voicingMidis: number[] | null }[];
+  currentMeasure: number;
+  dimRest: boolean;
+  viewMode: ViewMode;
+  rootPc: number;
+  intervals: number[];
+  guitarWritten: boolean;
+  clickToHear: boolean;
+  evaluate: (pc: number, opts?: { placed?: boolean; midi?: number }) => NoteHighlight | null;
+  onPress: (midi: number) => void;
+}) {
+  const current = Math.min(Math.max(currentMeasure, 0), measures.length - 1);
+  const layouts = measures.map((measure) =>
+    staffLayoutFor({
+      viewMode,
+      rootPc,
+      intervals,
+      chord: measure.chord,
+      voicingMidis: measure.voicingMidis,
+      pickedMidis: [],
+      guitarWritten,
+    }),
+  );
+  const grand = layouts[0]?.system === 'grand';
+  const signature = layouts[current]?.signature ?? layouts[0].signature;
+  let maxStep = TREBLE_TOP_STEP;
+  let minStep = grand ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP;
+  for (const layout of layouts) {
+    for (const note of layout.notes) {
+      maxStep = Math.max(maxStep, note.drawStep);
+      minStep = Math.min(minStep, note.drawStep);
+      for (const step of note.ledgerSteps) {
+        maxStep = Math.max(maxStep, step);
+        minStep = Math.min(minStep, step);
+      }
+    }
+  }
+  const hasOttava = layouts.some((layout) => layout.notes.some((note) => note.octaveShift > 0));
+  maxStep += 6;
+  minStep -= hasOttava ? 5 : 3;
+  const yOf = (step: number) => (maxStep - step) * STEP + 4;
+  const height = yOf(minStep) + 12;
+  const barX = grand ? 30 : 12;
+  const sigCount = Math.abs(signature.fifths);
+  let cursor = barX + CLEF_W + sigCount * SIG_W;
+  const boxes = layouts.map((layout, index) => {
+    const acc = layout.notes.reduce((max, note) => Math.max(max, note.accidentalColumn), 0);
+    const head = layout.notes.reduce((max, note) => Math.max(max, note.headColumn), 0);
+    const notesLeft = cursor + 16 + acc * ACC_W;
+    const content = head * HEAD_SHIFT;
+    const right = Math.max(notesLeft + content + 28, cursor + 78);
+    const box = { layout, index, left: cursor, notesLeft, right };
+    cursor = right;
+    return box;
+  });
+  const endX = Math.max(cursor, barX + 148);
+  if (boxes.length > 0 && boxes[boxes.length - 1].right < endX) boxes[boxes.length - 1].right = endX;
+  const width = endX + RIGHT;
+  const gLine = yOf(TREBLE_BOTTOM_STEP + 2);
+  const fLine = yOf(BASS_BOTTOM_STEP + 6);
+  const top = yOf(TREBLE_TOP_STEP);
+  const bottom = yOf(grand ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP);
+
+  return (
+    <svg
+      className={clickToHear ? 'staff staff-live' : 'staff'}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={staffLabel(layouts[current] ?? layouts[0])}
+    >
+      {grand && <Brace x={barX - 6} top={top} bottom={bottom} />}
+      <StaffLines bottom={TREBLE_BOTTOM_STEP} x1={barX} x2={endX} yOf={yOf} />
+      {grand && <StaffLines bottom={BASS_BOTTOM_STEP} x1={barX} x2={endX} yOf={yOf} />}
+      <line className="staff-bar" x1={barX} y1={top} x2={barX} y2={bottom} />
+      <TrebleClef x={barX + 6} y={gLine + 28} />
+      {guitarWritten && (
+        <text className="staff-clef-eight" x={barX + 24} y={yOf(TREBLE_BOTTOM_STEP) + 18} textAnchor="middle">
+          8
+        </text>
+      )}
+      {grand && <BassClef x={barX + 8} y={fLine + 18} />}
+      {(['treble', 'bass'] as StaffName[]).map((staff) => {
+        if (staff === 'bass' && !grand) return null;
+        return keySignatureSpots(signature, staff).map((spot, index) => (
+          <AccidentalMark
+            key={`${staff}-${spot.step}`}
+            value={spot.accidental}
+            x={barX + CLEF_W + index * SIG_W}
+            y={yOf(spot.step)}
+          />
+        ));
+      })}
+      {boxes.map((box) => {
+        const on = box.index === current;
+        const chord = measures[box.index].chord;
+        const classes = ['staff-measure'];
+        if (on) classes.push('is-current');
+        if (dimRest && !on) classes.push('is-dim');
+        return (
+          <g key={box.index} className={classes.join(' ')} data-measure-index={box.index}>
+            {on && (
+              <rect
+                className="staff-current"
+                x={box.left}
+                y={top - 10}
+                width={Math.max(1, box.right - box.left)}
+                height={bottom - top + 20}
+              />
+            )}
+            <line className="staff-bar" x1={box.right} y1={top} x2={box.right} y2={bottom} />
+            {box.layout.notes.map((note, index) =>
+              note.ledgerSteps.map((step) => {
+                const x = box.notesLeft + note.headColumn * HEAD_SHIFT;
+                const y = yOf(step);
+                return (
+                  <line
+                    key={`${note.written.name}-${index}-${step}`}
+                    className="staff-ledger"
+                    x1={x - 14}
+                    y1={y}
+                    x2={x + 14}
+                    y2={y}
+                  />
+                );
+              }),
+            )}
+            {box.layout.notes.map((note, index) => {
+              if (note.accidental === null) return null;
+              return (
+                <AccidentalMark
+                  key={`acc-${note.written.name}-${index}`}
+                  value={note.accidental}
+                  x={box.notesLeft - 18 - note.accidentalColumn * ACC_W}
+                  y={yOf(note.drawStep)}
+                />
+              );
+            })}
+            {box.layout.notes.map((note, index) => {
+              const x = box.notesLeft + note.headColumn * HEAD_SHIFT;
+              const y = yOf(note.drawStep);
+              const ev = on ? evaluate(mod(note.midi, 12), { placed: true, midi: note.midi }) : null;
+              const fill = ev ? noteFillClass(ev, false) : `note note-${chordRole(chord, note.midi)}`;
+              const mark = octaveMark(note.octaveShift);
+              const title = mark ? `${note.written.name}, ${mark}` : note.written.name;
+              return (
+                <g key={`head-${index}-${note.midi}`} data-midi={note.midi} onClick={() => onPress(note.midi)}>
+                  <title>{title}</title>
+                  <ellipse
+                    className={`${fill} staff-notehead`}
+                    cx={x}
+                    cy={y}
+                    rx={HEAD_RX}
+                    ry={HEAD_RY}
+                    transform={`rotate(-18 ${x} ${y})`}
+                  />
+                  {(ev?.ring || (!ev && mod(note.midi, 12) === chord.rootPc)) && (
+                    <ellipse
+                      className="note-root-ring"
+                      cx={x}
+                      cy={y}
+                      rx={HEAD_RX + 3.2}
+                      ry={HEAD_RY + 2.4}
+                      transform={`rotate(-18 ${x} ${y})`}
+                    />
+                  )}
+                  {ev?.reference && (
+                    <ellipse
+                      className="note-reference-ring"
+                      cx={x}
+                      cy={y}
+                      rx={HEAD_RX + 5.4}
+                      ry={HEAD_RY + 4}
+                      transform={`rotate(-18 ${x} ${y})`}
+                    />
+                  )}
+                  {ev?.outside && (
+                    <ellipse
+                      className="note-outside-ring"
+                      cx={x}
+                      cy={y}
+                      rx={HEAD_RX + 3.2}
+                      ry={HEAD_RY + 2.4}
+                      transform={`rotate(-18 ${x} ${y})`}
+                    />
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function GrandStaff(props: Props) {
   const {
     viewMode,
@@ -169,6 +393,10 @@ export function GrandStaff(props: Props) {
     evaluate,
     onPlay,
     onReference,
+    measures = null,
+    currentMeasure = 0,
+    dimRest = false,
+    soundingDegree = null,
   } = props;
 
   const layout = staffLayoutFor({
@@ -272,6 +500,7 @@ export function GrandStaff(props: Props) {
             : 'Sounding pitch, on the grand staff.'}
         </p>
       </div>
+      {!(measures && measures.length > 0 && (viewMode === 'chord' || viewMode === 'triad')) ? (
       <svg
         className={clickToHear ? 'staff staff-live' : 'staff'}
         width={width}
@@ -351,9 +580,17 @@ export function GrandStaff(props: Props) {
           const mark = octaveMark(note.octaveShift);
           const title = mark ? `${note.written.name}, ${mark}` : note.written.name;
           return (
-            <g key={`head-${note.written.name}-${index}-${note.midi}`} onClick={() => press(note.midi)}>
+            <g
+              key={`head-${note.written.name}-${index}-${note.midi}`}
+              data-midi={note.midi}
+              data-sounding={soundingDegree === index ? 'true' : undefined}
+              onClick={() => press(note.midi)}
+            >
               <title>{title}</title>
               <ellipse className={`${fill} staff-notehead`} cx={x} cy={y} rx={HEAD_RX} ry={HEAD_RY} transform={`rotate(-18 ${x} ${y})`} />
+              {soundingDegree === index && (
+                <ellipse className="note-sounding" cx={x} cy={y} rx={HEAD_RX + 4} ry={HEAD_RY + 3} transform={`rotate(-18 ${x} ${y})`} />
+              )}
               {ev?.ring && (
                 <ellipse className="note-root-ring" cx={x} cy={y} rx={HEAD_RX + 3.2} ry={HEAD_RY + 2.4} transform={`rotate(-18 ${x} ${y})`} />
               )}
@@ -367,6 +604,20 @@ export function GrandStaff(props: Props) {
           );
         })}
       </svg>
+      ) : (
+        <MeasuresStaff
+          measures={measures}
+          currentMeasure={currentMeasure}
+          dimRest={dimRest}
+          viewMode={viewMode}
+          rootPc={rootPc}
+          intervals={intervals}
+          guitarWritten={guitarWritten}
+          clickToHear={clickToHear}
+          evaluate={evaluate}
+          onPress={press}
+        />
+      )}
       {labelMode === 'standard' && (
         <p className="staff-footnote">Staff shows concert pitch. Standard names are a semitone higher.</p>
       )}

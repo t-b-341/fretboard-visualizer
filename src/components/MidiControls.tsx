@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import './MidiControls.css';
-import type { Triad } from '../music/chords';
-import { midiEngine, scaleToMidi, triadToMidi } from '../audio/midi';
+import { midiEngine } from '../audio/midi';
 import { midiInput } from '../audio/midiIn';
 import { player } from '../audio/player';
 import { synth } from '../audio/synth';
 
 interface Props {
   rootPc: number;
-  intervals: number[];
-  triad: Triad;
   soundOctave: number;
   onSoundOctave: (octave: number) => void;
   drone: boolean;
@@ -28,8 +25,6 @@ type Status = 'idle' | 'enabling' | 'ready' | 'unsupported' | 'denied';
 
 export function MidiControls({
   rootPc,
-  intervals,
-  triad,
   soundOctave,
   onSoundOctave,
   drone,
@@ -46,7 +41,6 @@ export function MidiControls({
   const [, setTick] = useState(0);
   const [status, setStatus] = useState<Status>(midiEngine.enabled ? 'ready' : 'idle');
   const [channel, setChannel] = useState(1);
-  const [bpm, setBpm] = useState(120);
   const droneMidi = (soundOctave + 1) * 12 + rootPc;
 
   // Retune a sounding drone when the root or octave changes. The first start
@@ -104,12 +98,6 @@ export function MidiControls({
   const inputs = midiInput.inputs();
   const ready = status === 'ready' || midiEngine.enabled;
   const selectedInput = inputs.find((port) => port.name === midiInputName);
-  const hasOutput = ready && !!midiEngine.outputId && outputs.length > 0;
-  // Playback works through the built-in synth even with no MIDI device.
-  const soundReady = synth.supported || hasOutput;
-
-  const playScale = () => player.playSequence(scaleToMidi(rootPc, intervals, soundOctave), { bpm });
-  const playChord = () => player.playChord(triadToMidi(triad.pitches, soundOctave));
 
   return (
     <div className="midi-bar">
@@ -165,29 +153,6 @@ export function MidiControls({
           ))}
         </select>
       </label>
-
-      <label className="midi-field">
-        Tempo
-        <input
-          type="number"
-          min={40}
-          max={240}
-          value={bpm}
-          onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
-        />
-      </label>
-
-      <span className="midi-sep" />
-
-      <button className="btn-mini" onClick={playScale} disabled={!soundReady}>
-        &#9654; Play scale
-      </button>
-      <button className="btn-mini" onClick={playChord} disabled={!soundReady}>
-        &#9654; Play chord
-      </button>
-      <button className="btn-mini" onClick={() => player.stop()}>
-        &#9632; Stop
-      </button>
 
       <span className="midi-sep" />
 

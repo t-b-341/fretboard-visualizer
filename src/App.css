@@ -847,6 +847,47 @@ input:focus {
   margin: 0 0 8px;
 }
 
+.staff-measure.is-dim {
+  opacity: 0.45;
+}
+.staff-current {
+  fill: rgba(143, 123, 255, 0.16);
+}
+.note-sounding {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+.motion-ring {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-dasharray: 3 2.5;
+  pointer-events: none;
+}
+.motion-ring-root { stroke: var(--root); }
+.motion-ring-third { stroke: var(--third); }
+.motion-ring-fifth { stroke: var(--fifth); }
+.motion-ring-seventh { stroke: var(--seventh); }
+.motion-ring-ext { stroke: var(--ext); }
+.motion-line {
+  stroke: #d7deea;
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  fill: none;
+  pointer-events: none;
+}
+.motion-label {
+  fill: #f4f7fb;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  paint-order: stroke;
+  stroke: #141820;
+  stroke-width: 3px;
+  pointer-events: none;
+}
 .guide-line {
   stroke: #ffd36b;
   stroke-width: 2;
@@ -896,7 +937,8 @@ input:focus {
 .keyboard .note-guide-ring,
 .keyboard .note-outside-ring,
 .keyboard .note-played,
-.keyboard .note-played-edge,
+.keyboard .note-sounding,
+.keyboard .motion-ring,
 .keyboard .played-mark,
 .keyboard .note-label,
 .keyboard .key-dot {

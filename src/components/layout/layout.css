@@ -17,7 +17,7 @@
 
 .app-tabs a,
 .header-button,
-.step-nav button,
+.transport button,
 .step-actions button,
 .add-chord-row button,
 .add-step,
@@ -42,7 +42,7 @@
 }
 
 .header-button,
-.step-nav button,
+.transport button,
 .step-actions button,
 .add-chord-row button,
 .add-step,
@@ -59,7 +59,8 @@
 .header-button:focus-visible,
 .app-tabs a:focus-visible,
 .step-chip:focus-visible,
-.step-nav button:focus-visible,
+.transport button:focus-visible,
+.transport input:focus-visible,
 .step-actions button:focus-visible,
 .add-chord-row button:focus-visible,
 .add-chord-row input:focus-visible,
@@ -282,9 +283,64 @@
   flex: 1 1 auto;
 }
 
-.step-nav {
-  display: inline-flex;
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+.transport label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.transport input[type='number'] {
+  width: 72px;
+  min-height: 36px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 8px;
+  font: inherit;
+}
+
+.export-menu {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 6;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.export-menu-list button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+}
+
+.export-menu .tab-fallback {
+  width: min(420px, 80vw);
 }
 
 .step-chip {
@@ -342,10 +398,16 @@
   flex: 0 0 auto;
 }
 
-.step-why {
+.step-why,
+.step-next {
   margin: 0;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.step-next {
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 
 .step-actions {
@@ -355,7 +417,7 @@
 }
 
 .step-actions button:disabled,
-.step-nav button:disabled {
+.transport button:disabled {
   opacity: 0.45;
   cursor: default;
 }

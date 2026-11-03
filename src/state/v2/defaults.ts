@@ -63,7 +63,7 @@ export function createDefaultV2(): AppStateV2 {
       labels: 'notes',
       names: 'concert',
       showKey: today.ghostScale,
-      voiceMotion: today.guideTones,
+      voiceMotion: true,
       staffPitch: today.staffPitch,
     },
     transport: {

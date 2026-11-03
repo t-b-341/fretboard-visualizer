@@ -3,6 +3,8 @@ import './App.css';
 import './components/layout/layout.css';
 import { useHeldNotes } from './audio/midiIn';
 import { player } from './audio/player';
+import { progressionToSmf } from './audio/midi';
+import { scaleUpAndDown, useTransportPlayback } from './audio/useTransport';
 import { Controls } from './components/Controls';
 import { Fretboard } from './components/Fretboard';
 import { GrandStaff } from './components/GrandStaff';
@@ -19,7 +21,11 @@ import { ProgressionControls } from './components/ProgressionControls';
 import type { ProgressionSnapshot } from './components/ProgressionControls';
 import { Quiz, useNoteQuiz } from './components/Quiz';
 import { TabExport } from './components/TabExport';
+import { downloadBytes } from './components/layout/ExportMenu';
+import { formatVoiceMotion, linkVoices, nextStepIndex } from './music/voiceMotion';
+import type { MotionPoint } from './music/voiceMotion';
 import { chordSymbol } from './music/chords';
+import type { ChordToneRole } from './music/chords';
 import { mod, noteName } from './music/notes';
 import type { NoteQuizSettings } from './music/quiz';
 import { chordWrittenNotes } from './music/staff';
@@ -30,6 +36,7 @@ import type { AppState, ColorMode } from './state/appState';
 import { deriveView } from './state/derive';
 import { toLegacy } from './state/v2/adapter';
 import { useAppV2 } from './state/v2/useAppV2';
+import type { Step } from './state/v2/types';
 import { chooseVoicings } from './state/v2/voicingChoice';
 
 export type { ViewMode, LabelMode, DisplayMode, InstrumentView };
@@ -50,7 +57,7 @@ function useTab(): 'workspace' | 'practice' {
 }
 
 export default function App() {
-  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault } =
+  const { state, setMaterialType, setKey, setView, setVoicing, setStepVoicing, setCurrentStep, prevStep, nextStep, addChord, removeStep, toggleLock, rerollStep, suggest, setNoteQuiz, setStartIn, setMyDefault, setTransport } =
     useAppV2();
   const tab = useTab();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -59,7 +66,7 @@ export default function App() {
   const [referencePc, setReferencePc] = useState<number | null>(null);
   const [quizExtras, setQuizExtras] = useState({ naturalsOnly: false, harmonic: false });
 
-  const legacy = useMemo(() => toLegacy(state), [state]);
+  const legacy = useMemo(() => ({ ...toLegacy(state), guideTones: false }), [state]);
   const session = useMemo<ProgressionSnapshot>(
     () => ({
       ...defaultProgression(),
@@ -179,22 +186,140 @@ export default function App() {
         title={shownVoicing ? undefined : tabTitle}
       />
     );
-  const playStep = () => {
-    const notes = state.voicing.shape === 'all' ? null : chosenVoicing;
-    if (notes) {
-      player.playChord(
-        notes.notes.map((note) => note.midi),
-        { durationMs: 1200 },
-      );
+  const { playing, sounding, stop, playSteps, playScale } = useTransportPlayback();
+  const stepMidis = useMemo(
+    () =>
+      state.material.steps.map((step, index) => {
+        const choice = choices[index];
+        const voicing = choice?.voicings[choice.index];
+        if (voicing && voicing.notes.length > 0) return voicing.notes.map((note) => note.midi);
+        return chordWrittenNotes(step.chord).map((note) => note.midi);
+      }),
+    [choices, state.material.steps],
+  );
+  const transportRef = useRef({
+    tempo: state.transport.tempo,
+    beats: state.settings.sound.beatsPerStep,
+    loop: state.transport.loop,
+    midis: stepMidis,
+  });
+  transportRef.current = {
+    tempo: state.transport.tempo,
+    beats: state.settings.sound.beatsPerStep,
+    loop: state.transport.loop,
+    midis: stepMidis,
+  };
+  const togglePlay = () => {
+    if (playing) {
+      stop();
       return;
     }
-    const chord = state.material.steps[stepIndex]?.chord;
-    if (!chord) return;
-    player.playChord(
-      chordWrittenNotes(chord).map((note) => note.midi),
-      { durationMs: 1200 },
-    );
+    if (state.material.type === 'scale') {
+      playScale(scaleUpAndDown(state.material.key.rootPc, derived.intervals, state.settings.sound.octave), () => transportRef.current.tempo);
+      return;
+    }
+    if (stepMidis.length === 0) return;
+    playSteps((index) => setCurrentStep(index), () => transportRef.current);
   };
+  const toggleRef = useRef(togglePlay);
+  toggleRef.current = togglePlay;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== ' ' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('button, input, textarea, select')) return;
+      event.preventDefault();
+      toggleRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const pointsOf = (index: number): MotionPoint[] => {
+    const choice = choices[index];
+    const voicing = choice?.voicings[choice.index];
+    if (voicing && voicing.notes.length > 0) {
+      return voicing.notes.map((note) => ({
+        midi: note.midi,
+        pc: note.pc,
+        role: note.role,
+        stringIndex: note.stringIndex,
+        fret: note.fret,
+      }));
+    }
+    const chord = state.material.steps[index]?.chord;
+    if (!chord) return [];
+    return chordWrittenNotes(chord).map((note) => ({ midi: note.midi, pc: mod(note.midi, 12) }));
+  };
+  const following =
+    state.material.type === 'scale' ? null : nextStepIndex(stepIndex, state.material.steps.length, state.transport.loop);
+  const fromPoints = following == null ? [] : pointsOf(stepIndex);
+  const toPoints = following == null ? [] : pointsOf(following);
+  const nextText = following == null ? '' : formatVoiceMotion(fromPoints, toPoints, derived.shift);
+  const placed = (point: MotionPoint): point is MotionPoint & { stringIndex: number; fret: number; role: ChordToneRole } =>
+    point.stringIndex != null && point.fret != null && point.role != null;
+  const neckMotion =
+    state.view.voiceMotion && following != null && fromPoints.some(placed) && toPoints.some(placed)
+      ? {
+          rings: toPoints.filter(placed).map((point) => ({
+            stringIndex: point.stringIndex,
+            fret: point.fret,
+            role: point.role,
+          })),
+          moves: linkVoices(fromPoints, toPoints).links.flatMap((link) => {
+            if (link.semitones === 0 || !placed(link.from) || !placed(link.to)) return [];
+            return [
+              {
+                fromString: link.from.stringIndex,
+                fromFret: link.from.fret,
+                toString: link.to.stringIndex,
+                toFret: link.to.fret,
+                semitones: link.semitones,
+              },
+            ];
+          }),
+        }
+      : null;
+  const fromMidis = new Set(fromPoints.map((point) => point.midi));
+  const addedMidis =
+    state.view.voiceMotion && following != null
+      ? toPoints.map((point) => point.midi).filter((midi) => !fromMidis.has(midi))
+      : null;
+  const columnLabel = (step: Step) => {
+    const symbol = chordSymbol(step.chord, derived.shift);
+    if (step.bassPc === undefined) return symbol;
+    return `${symbol}/${noteName(mod(step.bassPc + derived.shift, 12))}`;
+  };
+  const progressionTab = formatTab(
+    legacy.tuning,
+    state.material.steps.map((step, index) => ({
+      label: columnLabel(step),
+      notes: choices[index]?.voicings[choices[index].index]?.notes ?? [],
+    })),
+    { labelShift: derived.shift },
+  );
+  const keyFile = noteName(mod(state.material.key.rootPc + derived.shift, 12)).replace(/#/g, 'sharp');
+  const exportMidi = () => {
+    if (state.material.steps.length === 0) return;
+    const bytes = progressionToSmf(stepMidis, {
+      bpm: state.transport.tempo,
+      beatsPerChord: state.settings.sound.beatsPerStep,
+      trackName: `Fretboard progression in ${noteName(mod(state.material.key.rootPc + derived.shift, 12))}`,
+    });
+    downloadBytes(bytes, 'audio/midi', `fretboard-${keyFile}-progression.mid`);
+  };
+  const scaleSound = state.material.type === 'scale' ? sounding : null;
+  const staffMeasures =
+    state.material.type === 'scale'
+      ? null
+      : state.material.steps.map((step, index) => {
+          const choice = choices[index];
+          const voicing = choice?.voicings[choice.index];
+          return {
+            chord: step.chord,
+            voicingMidis: voicing && voicing.notes.length > 0 ? voicing.notes.map((note) => note.midi) : null,
+          };
+        });
   const fretTo = Math.min(legacy.fretTo, legacy.fretCount);
   const onPlay = (midi: number) => player.playNote(midi, 420);
 
@@ -211,7 +336,10 @@ export default function App() {
         <div className="workspace">
           <MaterialPanel
             type={state.material.type}
-            onType={setMaterialType}
+            onType={(material) => {
+              stop();
+              setMaterialType(material);
+            }}
             selection={state.material.key}
             names={state.view.names}
             steps={state.material.steps}
@@ -239,9 +367,19 @@ export default function App() {
               rootPc={state.material.key.rootPc}
               intervals={derived.intervals}
               shift={derived.shift}
+              playing={playing}
+              canPlay={state.material.type === 'scale' || state.material.steps.length > 0}
+              tempo={state.transport.tempo}
+              loop={state.transport.loop}
+              nextText={nextText}
+              tabText={progressionTab}
+              tabFileName={`fretboard-${keyFile}-progression.txt`}
               onPrev={prevStep}
-              onPlay={playStep}
+              onTogglePlay={togglePlay}
               onNext={nextStep}
+              onTempo={(tempo) => setTransport({ tempo })}
+              onLoop={(loop) => setTransport({ loop })}
+              onMidi={exportMidi}
               onSelect={setCurrentStep}
               onToggleLock={toggleLock}
               onReroll={rerollStep}
@@ -253,11 +391,15 @@ export default function App() {
               keyboard={state.view.keyboard}
               labels={state.view.labels}
               names={state.view.names}
+              showKey={state.view.showKey}
+              voiceMotion={state.view.voiceMotion}
               onStaff={(staff) => setView({ staff })}
               onNeck={(neck) => setView({ neck })}
               onKeyboard={(keyboard) => setView({ keyboard })}
               onLabels={(labels) => setView({ labels })}
               onNames={(names) => setView({ names })}
+              onShowKey={(showKey) => setView({ showKey })}
+              onVoiceMotion={(voiceMotion) => setView({ voiceMotion })}
             />
             {state.view.staff && (
               <ViewCard title="Staff" testId="staff-card" className="staff-card">
@@ -277,6 +419,10 @@ export default function App() {
                   evaluate={derived.evaluateFretboard}
                   onPlay={onPlay}
                   onReference={referenceOn ? chooseReference : undefined}
+                  measures={staffMeasures}
+                  currentMeasure={stepIndex}
+                  dimRest={state.view.voiceMotion}
+                  soundingDegree={scaleSound?.degree ?? null}
                 />
               </ViewCard>
             )}
@@ -311,6 +457,8 @@ export default function App() {
                   caption={null}
                   showPlayed={legacy.showPlayedNotes}
                   playedMidis={held}
+                  motion={neckMotion}
+                  soundingMidi={scaleSound?.midi ?? null}
                 >
                   {tabExport}
                 </Fretboard>
@@ -328,6 +476,8 @@ export default function App() {
                   clickToHear={legacy.clickToHear}
                   evaluate={derived.evaluateFretboard}
                   voicingMidis={shownVoicing ? shownVoicing.notes.map((note) => note.midi) : null}
+                  addedMidis={addedMidis}
+                  soundingMidi={scaleSound?.midi ?? null}
                   onPlay={onPlay}
                   onReference={referenceOn ? chooseReference : undefined}
                   showPlayed={legacy.showPlayedNotes}
@@ -387,8 +537,6 @@ export default function App() {
               />
               <MidiControls
                 rootPc={legacy.rootPc}
-                intervals={derived.intervals}
-                triad={derived.triad}
                 soundOctave={legacy.soundOctave}
                 onSoundOctave={noop}
                 drone={legacy.drone}

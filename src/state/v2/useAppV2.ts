@@ -31,6 +31,7 @@ export type AppAction =
   | { type: 'setNoteQuiz'; settings: NoteQuizSettings }
   | { type: 'setStartIn'; startIn: StartIn }
   | { type: 'setMyDefault' }
+  | { type: 'setTransport'; transport: Partial<AppStateV2['transport']> }
   | { type: 'reset' };
 
 const VIEW_KEYS = [
@@ -211,6 +212,14 @@ export function reduceApp(state: AppStateV2, action: AppAction): AppStateV2 {
     case 'setStartIn':
       if (state.settings.startIn === action.startIn) return state;
       return { ...state, settings: { ...state.settings, startIn: action.startIn } };
+    case 'setTransport': {
+      const tempo = Number.isFinite(action.transport.tempo)
+        ? Math.max(40, Math.min(240, Math.round(action.transport.tempo as number)))
+        : state.transport.tempo;
+      const loop = typeof action.transport.loop === 'boolean' ? action.transport.loop : state.transport.loop;
+      if (tempo === state.transport.tempo && loop === state.transport.loop) return state;
+      return { ...state, transport: { tempo, loop } };
+    }
     case 'setMyDefault': {
       const myDefault = captureMyDefault(state);
       const prev = state.settings.myDefault;
@@ -301,6 +310,9 @@ export function useAppV2() {
     dispatch({ type: 'setStartIn', startIn });
   }, []);
   const setMyDefault = useCallback(() => dispatch({ type: 'setMyDefault' }), []);
+  const setTransport = useCallback((transport: Partial<AppStateV2['transport']>) => {
+    dispatch({ type: 'setTransport', transport });
+  }, []);
   const reset = useCallback(() => dispatch({ type: 'reset' }), []);
 
   return {
@@ -322,6 +334,7 @@ export function useAppV2() {
     setNoteQuiz,
     setStartIn,
     setMyDefault,
+    setTransport,
     reset,
   };
 }

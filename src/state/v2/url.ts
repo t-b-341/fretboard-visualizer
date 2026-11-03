@@ -86,6 +86,7 @@ export function writeUrl(state: AppStateV2): string {
     const clean = normalizeV2(state);
     const params = new URLSearchParams(encodeState(toUrlApp(clean), createInitialState()));
     params.set('sf', clean.view.staff ? '1' : '0');
+    params.set('vm', clean.view.voiceMotion ? '1' : '0');
     return params.toString();
   } catch {
     return '';
@@ -97,7 +98,12 @@ export function readUrl(search: string): AppStateV2 {
   try {
     const raw = (search.startsWith('?') ? search.slice(1) : search).split('#')[0] ?? '';
     if (raw.trim() === '') return createDefaultV2();
-    return migrateV1(decodeState(raw, createInitialState()));
+    const state = migrateV1(decodeState(raw, createInitialState()));
+    const voiceMotion = new URLSearchParams(raw).get('vm');
+    if (voiceMotion === '1' || voiceMotion === '0') {
+      return { ...state, view: { ...state.view, voiceMotion: voiceMotion === '1' } };
+    }
+    return state;
   } catch {
     return createDefaultV2();
   }

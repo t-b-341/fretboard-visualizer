@@ -6,22 +6,30 @@ export function ViewBar({
   keyboard,
   labels,
   names,
+  showKey,
+  voiceMotion,
   onStaff,
   onNeck,
   onKeyboard,
   onLabels,
   onNames,
+  onShowKey,
+  onVoiceMotion,
 }: {
   staff: boolean;
   neck: boolean;
   keyboard: boolean;
   labels: LabelStyle;
   names: NameStyle;
+  showKey: boolean;
+  voiceMotion: boolean;
   onStaff: (on: boolean) => void;
   onNeck: (on: boolean) => void;
   onKeyboard: (on: boolean) => void;
   onLabels: (labels: LabelStyle) => void;
   onNames: (names: NameStyle) => void;
+  onShowKey: (on: boolean) => void;
+  onVoiceMotion: (on: boolean) => void;
 }) {
   return (
     <div className="view-bar" data-testid="view-bar">
@@ -47,6 +55,14 @@ export function ViewBar({
         <Choice current={names} value="concert" label="Concert" onPick={onNames} />
         <Choice current={names} value="standard" label="Standard" onPick={onNames} />
       </div>
+      <label>
+        <input type="checkbox" checked={showKey} onChange={(event) => onShowKey(event.target.checked)} />
+        Show key
+      </label>
+      <label>
+        <input type="checkbox" checked={voiceMotion} onChange={(event) => onVoiceMotion(event.target.checked)} />
+        Voice motion
+      </label>
     </div>
   );
 }

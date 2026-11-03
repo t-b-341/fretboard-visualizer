@@ -3,6 +3,7 @@ import { chordSymbol, romanForChord } from '../../music/chords';
 import { explainStep, functionOf } from '../../music/explain';
 import { mod, noteName } from '../../music/notes';
 import type { Step } from '../../state/v2/types';
+import { ExportMenu } from './ExportMenu';
 
 export function StepsStrip({
   steps,
@@ -10,9 +11,19 @@ export function StepsStrip({
   rootPc,
   intervals,
   shift,
+  playing,
+  canPlay,
+  tempo,
+  loop,
+  nextText,
+  tabText,
+  tabFileName,
   onPrev,
-  onPlay,
+  onTogglePlay,
   onNext,
+  onTempo,
+  onLoop,
+  onMidi,
   onSelect,
   onToggleLock,
   onReroll,
@@ -23,9 +34,19 @@ export function StepsStrip({
   rootPc: number;
   intervals: number[];
   shift: number;
+  playing: boolean;
+  canPlay: boolean;
+  tempo: number;
+  loop: boolean;
+  nextText: string;
+  tabText: string;
+  tabFileName: string;
   onPrev: () => void;
-  onPlay: () => void;
+  onTogglePlay: () => void;
   onNext: () => void;
+  onTempo: (tempo: number) => void;
+  onLoop: (loop: boolean) => void;
+  onMidi: () => void;
   onSelect: (index: number) => void;
   onToggleLock: (index: number) => void;
   onReroll: (index: number) => void;
@@ -59,12 +80,12 @@ export function StepsStrip({
             + Add step
           </button>
         </div>
-        <div className="step-nav">
+        <div className="transport" data-testid="transport">
           <button type="button" aria-label="Prev" onClick={onPrev} disabled={steps.length === 0 || currentStep <= 0}>
             ‹ Prev
           </button>
-          <button type="button" aria-label="Play" onClick={onPlay} disabled={steps.length === 0}>
-            Play
+          <button type="button" onClick={onTogglePlay} disabled={!canPlay} aria-pressed={playing}>
+            {playing ? 'Stop' : 'Play'}
           </button>
           <button
             type="button"
@@ -74,10 +95,29 @@ export function StepsStrip({
           >
             Next ›
           </button>
+          <label>
+            Tempo
+            <input
+              type="number"
+              aria-label="Tempo"
+              min={40}
+              max={240}
+              value={tempo}
+              onChange={(event) => onTempo(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            <input type="checkbox" checked={loop} onChange={(event) => onLoop(event.target.checked)} />
+            Loop
+          </label>
+          <ExportMenu disabled={steps.length === 0} tabText={tabText} tabFileName={tabFileName} onMidi={onMidi} />
         </div>
       </div>
       <p className="step-why" data-testid="step-why">
         Why: {why}
+      </p>
+      <p className="step-next" data-testid="step-next">
+        Next: {nextText}
       </p>
       <div className="step-actions">
         <button type="button" onClick={() => onToggleLock(currentStep)} disabled={!current}>

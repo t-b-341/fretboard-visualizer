@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
-import type { Chord } from '../music/chords';
+import type { Chord, ChordToneRole } from '../music/chords';
 import type { ViewMode } from '../music/types';
 import { mod, noteName } from '../music/notes';
 import { noteFillClass, noteTextClass } from '../music/highlight';
+import { signedSemitones } from '../music/voiceMotion';
 import { guideTonePcs, placeGuideVoices } from '../music/guide';
 import type { GuidePoint } from '../music/guide';
 import type { HighlightEvaluator } from '../state/derive';
@@ -70,6 +71,13 @@ interface Props {
   /** MIDI notes held from an input, drawn at every position with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
+  /** Dashed rings and motion lines toward the next step. Omitted when voice motion is off. */
+  motion?: {
+    rings: { stringIndex: number; fret: number; role: ChordToneRole }[];
+    moves: { fromString: number; fromFret: number; toString: number; toFret: number; semitones: number }[];
+  } | null;
+  /** The scale note sounding right now, drawn on every cell with that MIDI number. */
+  soundingMidi?: number | null;
   /** Shown above the neck. Used for the tab of a single grip. */
   children?: ReactNode;
 }
@@ -127,6 +135,8 @@ export function Fretboard(props: Props) {
     practice,
     showPlayed = false,
     playedMidis = NO_PLAYED,
+    motion = null,
+    soundingMidi = null,
     children,
   } = props;
 
@@ -239,6 +249,10 @@ export function Fretboard(props: Props) {
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
     return [clickToHear || picking || quizzing || onReference ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
+
+  const sounding = (midi: number) => soundingMidi != null && midi === soundingMidi;
+  const roleClass = (role: ChordToneRole) =>
+    role === 'root' || role === 'third' || role === 'fifth' || role === 'seventh' ? role : 'ext';
 
   return (
     <div className="fretboard-wrap">
@@ -356,6 +370,8 @@ export function Fretboard(props: Props) {
                   <g
                     key={`n-${cell.stringIndex}-${cell.fret}`}
                     className={practice.listen ? 'note-hit' : undefined}
+                    data-midi={cell.midi}
+                    data-sounding={sounding(cell.midi) ? 'true' : undefined}
                     onClick={practice.listen ? click : undefined}
                   >
                     {mark || practice.heatmap ? (
@@ -394,7 +410,7 @@ export function Fretboard(props: Props) {
               if (!ev) {
                 if (!picking && !quizzing && !played) return null;
                 return (
-                  <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
+                  <g key={key} className={noteClass(cell.fret)} data-midi={cell.midi} data-sounding={sounding(cell.midi) ? 'true' : undefined} onClick={onCellClick}>
                     {(picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />}
                     <PlayedMark x={x} y={y} on={played} />
                   </g>
@@ -405,6 +421,8 @@ export function Fretboard(props: Props) {
                   <g
                     key={key}
                     className={noteClass(cell.fret)}
+                    data-midi={cell.midi}
+                    data-sounding={sounding(cell.midi) ? 'true' : undefined}
                     onClick={() => {
                       onReference?.(mod(cell.midi, 12));
                       play(cell.midi);
@@ -418,8 +436,9 @@ export function Fretboard(props: Props) {
                 );
               }
               return (
-                <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
+                <g key={key} className={noteClass(cell.fret)} data-midi={cell.midi} data-sounding={sounding(cell.midi) ? 'true' : undefined} onClick={onCellClick}>
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
+                  {sounding(cell.midi) && <circle className="note-sounding" cx={x} cy={y} r={R + 5} />}
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
                   {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={R + 6} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
@@ -438,6 +457,36 @@ export function Fretboard(props: Props) {
               );
             }),
           )}
+
+          {motion?.moves.map((move, index) => {
+            if (move.semitones === 0) return null;
+            if (hidden.has(move.fromString) || hidden.has(move.toString)) return null;
+            if (move.fromFret < from || move.fromFret > to || move.toFret < from || move.toFret > to) return null;
+            const x1 = X(noteX(move.fromFret));
+            const y1 = stringY(move.fromString);
+            const x2 = X(noteX(move.toFret));
+            const y2 = stringY(move.toString);
+            return (
+              <g key={`move-${index}`} className="voice-move">
+                <line className="motion-line" x1={x1} y1={y1} x2={x2} y2={y2} />
+                <text className="motion-label" x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 10} textAnchor="middle">
+                  {signedSemitones(move.semitones)}
+                </text>
+              </g>
+            );
+          })}
+          {motion?.rings.map((ring, index) => {
+            if (hidden.has(ring.stringIndex) || ring.fret < from || ring.fret > to) return null;
+            return (
+              <circle
+                key={`ring-${ring.stringIndex}-${ring.fret}-${index}`}
+                className={`motion-ring motion-ring-${roleClass(ring.role)}`}
+                cx={X(noteX(ring.fret))}
+                cy={stringY(ring.stringIndex)}
+                r={R + 5}
+              />
+            );
+          })}
         </svg>
       )}
     </div>

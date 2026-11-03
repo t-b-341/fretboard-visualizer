@@ -221,6 +221,7 @@ describe('migrateV1', () => {
     const fromToday = migrateV1(createInitialState());
     const v1AsV2 = createDefaultV2();
     v1AsV2.view.staff = false;
+    v1AsV2.view.voiceMotion = false;
     expect(fromEmpty).toEqual(v1AsV2);
     expect(fromToday).toEqual(v1AsV2);
   });
