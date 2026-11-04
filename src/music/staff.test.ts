@@ -3,15 +3,19 @@ import { buildChord } from './chords';
 import { getFamily } from './scales';
 import {
   BASS_BOTTOM_STEP,
+  BASS_TOP_STEP,
   TREBLE_BOTTOM_STEP,
   TREBLE_SPLIT,
+  bassStaffOriginShift,
   emptyKeySignature,
   keySignatureSpots,
   layoutChord,
   layoutScale,
   layoutStaff,
   layoutVoicing,
+  measuresPerSystem,
   placeNotes,
+  wrapMeasures,
 } from './staff';
 import { writeMidi } from './written';
 
@@ -188,5 +192,47 @@ describe('chords and voicings', () => {
     expect(note.octaveShift).toBe(1);
     expect(note.drawStep).toBe(27);
     expect(note.ledgerSteps).toEqual([28]);
+  });
+
+  it('writes a 6-string bass Bb2 an octave up on the bass staff with an 8', () => {
+    const layout = layoutStaff({
+      notes: [writeMidi(46, 6, -1)],
+      placement: 'stack',
+      signature: emptyKeySignature(),
+      guitarWritten: true,
+      writtenStaff: 'bass',
+    });
+    const note = layout.notes[0];
+    expect(layout.system).toBe('bass');
+    expect(layout.clefEight).toBe(true);
+    expect(note.midi).toBe(46);
+    expect(note.written.name).toBe('Bb3');
+    expect(note.written.octave).toBe(3);
+    expect(note.staff).toBe('bass');
+  });
+});
+
+describe('grand staff spacing and systems', () => {
+  it('puts the bass staff origin at least 4 spaces below the treble', () => {
+    const shift = bassStaffOriginShift();
+    const spaces = (TREBLE_BOTTOM_STEP - BASS_TOP_STEP + shift) / 2;
+    expect(shift).toBeGreaterThan(0);
+    expect(spaces).toBeGreaterThanOrEqual(4);
+  });
+
+  it('wraps a progression at 4 measures per system', () => {
+    expect(measuresPerSystem(false)).toBe(4);
+    expect(measuresPerSystem(true)).toBe(2);
+    expect(wrapMeasures(9)).toEqual([
+      { start: 0, end: 4 },
+      { start: 4, end: 8 },
+      { start: 8, end: 9 },
+    ]);
+    expect(wrapMeasures(4)).toEqual([{ start: 0, end: 4 }]);
+    expect(wrapMeasures(5, measuresPerSystem(true))).toEqual([
+      { start: 0, end: 2 },
+      { start: 2, end: 4 },
+      { start: 4, end: 5 },
+    ]);
   });
 });

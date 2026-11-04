@@ -98,6 +98,12 @@ describe('spellingMap', () => {
     expect(spelling.get(0)).toBe('C');
   });
 
+  it('spells a concert D major chord as Eb G Bb when Standard names sit in a sharp key', () => {
+    const chord = buildChord(2, 'maj');
+    const { spelling } = spellingMap(11, [0, 2, 4, 5, 7, 9, 11], chord, 1);
+    expect([2, 6, 9].map((pc) => spelling.get((pc + 1) % 12)).join(' ')).toBe('Eb G Bb');
+  });
+
   it('leaves non-heptatonic scales without letter spellings', () => {
     const { scaleSpelling, spelling } = spellingMap(0, [0, 2, 4, 7, 9], null, 0);
     expect(scaleSpelling).toBeNull();
@@ -281,11 +287,13 @@ describe('deriveView', () => {
     expect(derived.formula).toEqual(['1', '2', '3', '4', '5', '6', '7']);
     expect(derived.origin?.text).toBe('Bb major.');
     expect(derived.rootName).toBe('Bb');
+    expect(derived.scalePcs).toEqual([10, 0, 2, 3, 5, 7, 9]);
     expect(derived.scaleSpelling?.map((tone) => tone.name)).toEqual(['Bb', 'C', 'D', 'Eb', 'F', 'G', 'A']);
     expect(derived.voicedChord).toBeNull();
     expect(derived.spellFormula).toBeNull();
     expect(derived.evaluateFretboard(10)).toMatchObject({ role: 'root', label: 'Bb' });
     expect(derived.evaluateFretboard(1)).toBeNull();
+    // 37-key window whose lowest key is C3.
     expect(derived.keyboardLowestMidi).toBe(48);
   });
 
@@ -302,5 +310,20 @@ describe('deriveView', () => {
     expect(derived.evaluateFretboard(10)?.role).toBe('root');
     expect(derived.evaluateFretboard(0)).toEqual({ role: 'ghost', label: '' });
     expect(derived.pulls).toEqual([]);
+  });
+
+  it('selects a voicing whose notes all belong to the chord', () => {
+    const chord = buildChord(0, 'maj7');
+    const derived = deriveView(
+      { ...createInitialState(), viewMode: 'chord', chordDisplay: 'voicing', activeChord: chord },
+      defaultProgression(),
+      null,
+    );
+    expect(derived.selectedVoicing).not.toBeNull();
+    const pcs = new Set(chord.pcs);
+    expect(derived.selectedVoicing!.notes.length).toBeGreaterThan(0);
+    for (const note of derived.selectedVoicing!.notes) {
+      expect(pcs.has(note.pc)).toBe(true);
+    }
   });
 });

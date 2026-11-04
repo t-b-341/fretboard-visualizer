@@ -4,8 +4,10 @@
 // only turns staff steps into pixels. Middle C (MIDI 60) and above go on the
 // treble staff; everything below goes on the bass staff.
 //
-// A note more than four ledger lines below its staff is written an octave
-// higher and marked 8vb (or 15mb, 22mb). The sounding MIDI does not change.
+// A note more than four ledger lines from its staff is written an octave
+// closer and marked 8vb below or 8va above (15mb / 15ma past that). The
+// sounding MIDI does not change. The bass staff is drawn lower than staffStep
+// alone would put it; ledger lines stay on the staffStep they already have.
 
 import type { Chord } from './chords';
 import { mod } from './notes';
@@ -29,6 +31,39 @@ export const BASS_BOTTOM_STEP = 4 + 7 * 2;
 /** Bass top line is A3. */
 export const BASS_TOP_STEP = BASS_BOTTOM_STEP + 8;
 
+/**
+ * Line-spaces between the treble bottom line and the bass top line.
+ * staffStep already leaves two; the rest is only a bass-origin shift.
+ */
+export const GRAND_STAFF_GAP = 5;
+
+/**
+ * Extra staff steps added to every bass-staff y.
+ * One line-space is two staff steps. Ledger steps are not changed.
+ */
+export function bassStaffOriginShift(): number {
+  const naturalSpaces = (TREBLE_BOTTOM_STEP - BASS_TOP_STEP) / 2;
+  return (GRAND_STAFF_GAP - naturalSpaces) * 2;
+}
+
+/** Measures on one system at desktop width. A narrow screen uses half of these. */
+export const MEASURES_PER_SYSTEM = 4;
+
+export function measuresPerSystem(narrow: boolean): number {
+  return narrow ? MEASURES_PER_SYSTEM / 2 : MEASURES_PER_SYSTEM;
+}
+
+/** Systems of a progression. `end` is exclusive. An empty list stays empty. */
+export function wrapMeasures(count: number, perSystem = MEASURES_PER_SYSTEM): { start: number; end: number }[] {
+  const size = Math.max(1, Math.floor(perSystem));
+  const total = Math.max(0, count);
+  const systems: { start: number; end: number }[] = [];
+  for (let start = 0; start < total; start += size) {
+    systems.push({ start, end: Math.min(total, start + size) });
+  }
+  return systems;
+}
+
 /** Two accidentals closer than this, in staff steps, cannot share a column. */
 const ACCIDENTAL_CLEARANCE = 6;
 
@@ -42,7 +77,7 @@ const BASS_SIGNATURE_SHIFT = -14;
 
 export type StaffName = 'treble' | 'bass';
 export type StaffPlacement = 'run' | 'stack';
-export type StaffSystem = 'grand' | 'treble';
+export type StaffSystem = 'grand' | 'treble' | 'bass';
 
 export interface KeySignature {
   /** Sharps are positive, flats negative, from -7 to 7. */
@@ -59,7 +94,10 @@ export interface LayoutNote {
   staff: StaffName;
   /** Staff step of the notehead. An 8vb note is raised by 7 per octave. */
   drawStep: number;
-  /** How many octaves the notehead was raised to stay within the ledger limit. */
+  /**
+   * Octaves the notehead was moved to stay within the ledger limit.
+   * Positive is written higher (8vb). Negative is written lower (8va).
+   */
   octaveShift: number;
   /** Staff steps of the ledger lines this note needs. */
   ledgerSteps: number[];
@@ -76,6 +114,8 @@ export interface LayoutNote {
 
 export interface StaffLayout {
   system: StaffSystem;
+  /** Written part: an 8 under the clef, and noteheads an octave above sounding. */
+  clefEight: boolean;
   signature: KeySignature;
   placement: StaffPlacement;
   notes: LayoutNote[];
@@ -85,8 +125,10 @@ export interface StaffSource {
   notes: readonly WrittenNote[];
   placement: StaffPlacement;
   signature: KeySignature;
-  /** One treble staff, notes written an octave higher, clef with an 8. */
+  /** Written part, an octave above sounding, with an 8 under the clef. */
   guitarWritten: boolean;
+  /** Which staff the written part uses. Guitar is treble; 6-string bass is bass. */
+  writtenStaff?: StaffName;
 }
 
 export interface PlaceOptions {
@@ -95,11 +137,13 @@ export interface PlaceOptions {
   signature: KeySignature;
 }
 
-/** "8vb", "15mb", "22mb", or null when the note is at its written octave. */
+/** "8va" / "8vb", then "15ma" / "15mb". Null when the notehead is unshifted. */
 export function octaveMark(octaveShift: number): string | null {
-  if (octaveShift <= 0) return null;
-  if (octaveShift === 1) return '8vb';
-  return `${octaveShift * 7 + 1}mb`;
+  if (octaveShift === 0) return null;
+  const above = octaveShift < 0;
+  const count = Math.abs(octaveShift);
+  if (count === 1) return above ? '8va' : '8vb';
+  return `${count * 7 + 1}${above ? 'ma' : 'mb'}`;
 }
 
 export function emptyKeySignature(): KeySignature {
@@ -214,9 +258,11 @@ function ledgerStepsFor(step: number, bottom: number, top: number): number[] {
   return lines;
 }
 
-function ledgerLinesBelow(lines: readonly number[], bottom: number): number {
+function ledgerLinesPast(lines: readonly number[], edge: number, above: boolean): number {
   let count = 0;
-  for (const line of lines) if (line < bottom) count += 1;
+  for (const line of lines) {
+    if (above ? line > edge : line < edge) count += 1;
+  }
   return count;
 }
 
@@ -228,12 +274,23 @@ function fitToStaff(
   let drawStep = step;
   let octaveShift = 0;
   let ledgerSteps = ledgerStepsFor(drawStep, bottom, top);
-  while (ledgerLinesBelow(ledgerSteps, bottom) > MAX_LEDGER_LINES_BELOW && octaveShift < 5) {
+  while (ledgerLinesPast(ledgerSteps, bottom, false) > MAX_LEDGER_LINES_BELOW && octaveShift < 5) {
     drawStep += 7;
     octaveShift += 1;
     ledgerSteps = ledgerStepsFor(drawStep, bottom, top);
   }
+  while (ledgerLinesPast(ledgerSteps, top, true) > MAX_LEDGER_LINES_BELOW && octaveShift > -5) {
+    drawStep -= 7;
+    octaveShift -= 1;
+    ledgerSteps = ledgerStepsFor(drawStep, bottom, top);
+  }
   return { drawStep, octaveShift, ledgerSteps };
+}
+
+function staffOf(system: StaffSystem, midi: number): StaffName {
+  if (system === 'treble') return 'treble';
+  if (system === 'bass') return 'bass';
+  return midi >= TREBLE_SPLIT ? 'treble' : 'bass';
 }
 
 function staffBounds(staff: StaffName): { bottom: number; top: number } {
@@ -280,7 +337,7 @@ function assignAccidentalColumns(notes: readonly LayoutNote[]) {
 
 export function placeNotes(notes: readonly WrittenNote[], options: PlaceOptions): LayoutNote[] {
   const placed = notes.map((written) => {
-    const staff: StaffName = options.system === 'treble' || written.midi >= TREBLE_SPLIT ? 'treble' : 'bass';
+    const staff = staffOf(options.system, written.midi);
     const bounds = staffBounds(staff);
     const fitted = fitToStaff(written.staffStep, bounds.bottom, bounds.top);
     const note: LayoutNote = {
@@ -304,7 +361,7 @@ export function placeNotes(notes: readonly WrittenNote[], options: PlaceOptions)
 }
 
 export function layoutStaff(source: StaffSource): StaffLayout {
-  const system: StaffSystem = source.guitarWritten ? 'treble' : 'grand';
+  const system: StaffSystem = source.guitarWritten ? (source.writtenStaff ?? 'treble') : 'grand';
   const display = source.guitarWritten
     ? source.notes.map((note) => writeMidi(note.midi + 12, note.letter, note.accidental))
     : source.notes;
@@ -316,6 +373,7 @@ export function layoutStaff(source: StaffSource): StaffLayout {
   for (let i = 0; i < placed.length; i++) placed[i].midi = source.notes[i].midi;
   return {
     system,
+    clefEight: source.guitarWritten,
     signature: source.signature,
     placement: source.placement,
     notes: placed,
@@ -373,18 +431,22 @@ export interface StaffRequest {
   voicingMidis: readonly number[] | null;
   pickedMidis: readonly number[];
   guitarWritten: boolean;
+  /** Written staff. Guitar is treble; 6-string bass is bass. Ignored for concert pitch. */
+  writtenStaff?: StaffName;
 }
 
 /** Notes for the current view. The scale's key signature is used in every view. */
 export function staffLayoutFor(request: StaffRequest): StaffLayout {
   const signature = keySignatureForScale(request.rootPc, request.intervals);
   const guitarWritten = request.guitarWritten;
+  const writtenStaff = request.writtenStaff;
   if (request.viewMode === 'scale') {
     return layoutStaff({
       notes: scaleWrittenNotes(request.rootPc, request.intervals),
       placement: 'run',
       signature,
       guitarWritten,
+      writtenStaff,
     });
   }
   if ((request.viewMode === 'chord' || request.viewMode === 'triad') && request.chord) {
@@ -394,6 +456,7 @@ export function staffLayoutFor(request: StaffRequest): StaffLayout {
       placement: 'stack',
       signature,
       guitarWritten,
+      writtenStaff,
     });
   }
   if (request.viewMode === 'identify' && request.pickedMidis.length > 0) {
@@ -403,7 +466,8 @@ export function staffLayoutFor(request: StaffRequest): StaffLayout {
       placement: 'stack',
       signature,
       guitarWritten,
+      writtenStaff,
     });
   }
-  return layoutStaff({ notes: [], placement: 'stack', signature, guitarWritten });
+  return layoutStaff({ notes: [], placement: 'stack', signature, guitarWritten, writtenStaff });
 }

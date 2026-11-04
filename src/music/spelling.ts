@@ -63,6 +63,31 @@ export function spellScale(rootPc: number, intervals: number[]): SpelledTone[] |
   return tones;
 }
 
+/**
+ * Name one sounding pitch class after the Concert (0) / Standard (+1) shift.
+ *
+ * The shift is applied first. A chord tone is then spelled from that shifted
+ * chord, so concert D major (D F# A) reads Eb G Bb rather than D# G A#.
+ * Other pitches use the key's spelling, then the standalone pitch name.
+ */
+export function nameAfterShift(
+  pc: number,
+  shift: number,
+  keyRootPc: number,
+  intervals: readonly number[],
+  chord: { rootPc: number; tones: readonly { interval: number; degree: string }[] } | null,
+): string {
+  const shown = mod(pc + shift, 12);
+  if (chord) {
+    const root = mod(chord.rootPc + shift, 12);
+    for (const tone of chord.tones) {
+      if (mod(root + tone.interval, 12) === shown) return spellChordTone(root, tone.interval, tone.degree);
+    }
+  }
+  const scale = spellScale(mod(keyRootPc + shift, 12), [...intervals]);
+  return scale?.find((tone) => tone.pc === shown)?.name ?? pitchSpelling(shown);
+}
+
 /** Spell one chord tone from the chord root, using the degree number for its letter. */
 export function spellChordTone(rootPc: number, interval: number, degree: string): string {
   const num = Number(degree.replace(/[^0-9]/g, ''));

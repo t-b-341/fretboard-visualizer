@@ -1,43 +1,97 @@
-import { player } from '../audio/player';
 import { candidateDetail, candidateLabel, type ChordCandidate } from '../music/identify';
+import { mod } from '../music/notes';
 
-interface Props {
-  candidates: ChordCandidate[];
-  notes: { pc: number; midi: number }[];
-  /** Fretboard picks can be cleared. Held MIDI notes release with the key. */
-  canClear: boolean;
-  shift: number;
-  onClear: () => void;
-  onSend: () => void;
+export interface NeckPick {
+  stringIndex: number;
+  fret: number;
+  pc: number;
+  midi: number;
 }
 
-export function IdentifyPanel({ candidates, notes, canClear, shift, onClear, onSend }: Props) {
-  const top = candidates[0];
-  const rest = candidates.slice(1);
-  const distinct = new Set(notes.map((note) => note.pc)).size;
-  const detail = top ? candidateDetail(top) : '';
+export interface KeyPick {
+  pc: number;
+  midi: number;
+}
+
+/** One note per string. The same cell clears it; another fret on that string moves it. */
+export function toggleNeckPick(picks: readonly NeckPick[], pick: NeckPick): NeckPick[] {
+  const rest = picks.filter((item) => item.stringIndex !== pick.stringIndex);
+  const same = picks.some((item) => item.stringIndex === pick.stringIndex && item.fret === pick.fret);
+  return same ? rest : [...rest, pick];
+}
+
+/** A keyboard click adds that MIDI note, or removes it when it is already a keyboard pick. */
+export function toggleKeyPick(picks: readonly KeyPick[], midi: number): KeyPick[] {
+  if (picks.some((item) => item.midi === midi)) return picks.filter((item) => item.midi !== midi);
+  return [...picks, { pc: mod(midi, 12), midi }];
+}
+
+interface Alternative {
+  index: number;
+  candidate: ChordCandidate;
+}
+
+interface Props {
+  /** The candidate the large name and the step actions share. */
+  chosen: ChordCandidate | null;
+  chosenIndex: number;
+  /** The other readings, at most two, in rank order. */
+  alternatives: Alternative[];
+  /** Distinct pitch classes in the grip. */
+  distinct: number;
+  shift: number;
+  canReplace: boolean;
+  onChoose: (index: number) => void;
+  onAdd: () => void;
+  onReplace: () => void;
+}
+
+export function IdentifyPanel({
+  chosen,
+  chosenIndex,
+  alternatives,
+  distinct,
+  shift,
+  canReplace,
+  onChoose,
+  onAdd,
+  onReplace,
+}: Props) {
+  const detail = chosen ? candidateDetail(chosen) : '';
 
   return (
-    <div className="identify-panel" aria-label="Chord identify">
+    <div className="identify-panel" data-testid="identify-result">
       <div className="identify-readout">
-        {top ? (
+        {chosen ? (
           <>
-            <div className="identify-primary">
-              <span className="identify-name">{candidateLabel(top, shift)}</span>
+            <button
+              type="button"
+              className="identify-choice is-primary"
+              data-testid="identify-primary"
+              data-slash={chosen.slashName}
+              aria-pressed="true"
+              onClick={() => onChoose(chosenIndex)}
+            >
+              <span className="identify-name">{candidateLabel(chosen, shift)}</span>
               {detail && <span className="identify-detail">{detail}</span>}
-            </div>
-            {rest.length > 0 && (
+            </button>
+            {alternatives.length > 0 && (
               <div className="identify-alts">
-                {rest.map((candidate, index) => {
+                {alternatives.map(({ candidate, index }) => {
                   const altDetail = candidateDetail(candidate);
                   return (
-                    <span
-                      key={`${candidate.chord.rootPc}-${candidate.chord.quality ?? candidate.chord.symbol}-${index}`}
-                      className="identify-alt"
+                    <button
+                      key={`${candidate.chord.rootPc}-${candidate.chord.symbol}-${index}`}
+                      type="button"
+                      className="identify-choice is-alt"
+                      data-testid="identify-alt"
+                      data-slash={candidate.slashName}
+                      aria-pressed="false"
+                      onClick={() => onChoose(index)}
                     >
-                      {candidateLabel(candidate, shift)}
-                      {altDetail ? ` · ${altDetail}` : ''}
-                    </span>
+                      <span className="identify-name">{candidateLabel(candidate, shift)}</span>
+                      {altDetail && <span className="identify-detail">{altDetail}</span>}
+                    </button>
                   );
                 })}
               </div>
@@ -48,24 +102,11 @@ export function IdentifyPanel({ candidates, notes, canClear, shift, onClear, onS
         )}
       </div>
       <div className="identify-actions">
-        <button type="button" className="btn-mini" onClick={onClear} disabled={!canClear}>
-          Clear
+        <button type="button" className="btn-mini" onClick={onAdd} disabled={!chosen}>
+          Add as step
         </button>
-        <button type="button" className="btn-mini" onClick={onSend} disabled={!top}>
-          Send to builder
-        </button>
-        <button
-          type="button"
-          className="btn-mini"
-          onClick={() =>
-            player.playChord(
-              notes.map((note) => note.midi),
-              { durationMs: 1200 },
-            )
-          }
-          disabled={notes.length === 0}
-        >
-          Play
+        <button type="button" className="btn-mini" onClick={onReplace} disabled={!chosen || !canReplace}>
+          Replace current step
         </button>
       </div>
     </div>

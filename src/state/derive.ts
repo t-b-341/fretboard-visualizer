@@ -1,6 +1,6 @@
 // Turns saved UI state into the scale, chord, spelling, highlight, and voicings the views draw.
 
-import type { ProgressionSnapshot } from '../components/ProgressionControls';
+import type { AppState, ProgressionSnapshot } from './appState';
 import {
   buildChord,
   chordInKey,
@@ -23,12 +23,10 @@ import { getFamily, getScaleNotes, parentScale, scaleFormulaLabels } from '../mu
 import type { FamilyDef, FamilyKey, ModeDef } from '../music/scales';
 import { buildCagedShapes, buildNotePerStringShapes, notesPerString } from '../music/shapes';
 import type { NeckShape, ShapeMode } from '../music/shapes';
-import { pitchSpelling, spellChordTone, spellScale } from '../music/spelling';
+import { nameAfterShift, pitchSpelling, spellScale } from '../music/spelling';
 import type { SpelledTone } from '../music/spelling';
 import { findVoicings, generateVoicings, selectVoicingTones, voicingBassRole } from '../music/voicings';
 import type { Voicing, VoicingStyle } from '../music/voicings';
-import type { AppState } from './appState';
-
 const INVERSIONS = ['Root position', '1st inversion', '2nd inversion', '3rd inversion'];
 
 export function selectScale(familyKey: FamilyKey, modeKey: string): {
@@ -62,14 +60,16 @@ export function spellingMap(
 ): { scaleSpelling: SpelledTone[] | null; spelling: Map<number, string> } {
   const scaleSpelling = spellScale(displayedRoot, intervals);
   const spelling = new Map<number, string>();
+  const concertRoot = mod(displayedRoot - shift, 12);
+  const label = (concertPc: number) =>
+    nameAfterShift(concertPc, shift, concertRoot, intervals, voicedChord);
   if (scaleSpelling) {
-    for (const tone of scaleSpelling) spelling.set(tone.pc, tone.name);
+    for (const tone of scaleSpelling) spelling.set(tone.pc, label(mod(tone.pc - shift, 12)));
   }
   if (voicedChord) {
-    const chordRoot = mod(voicedChord.rootPc + shift, 12);
     for (const tone of voicedChord.tones) {
-      const pc = mod(chordRoot + tone.interval, 12);
-      if (!spelling.has(pc)) spelling.set(pc, spellChordTone(chordRoot, tone.interval, tone.degree));
+      const concertPc = mod(voicedChord.rootPc + tone.interval, 12);
+      spelling.set(mod(concertPc + shift, 12), label(concertPc));
     }
   }
   return { scaleSpelling, spelling };

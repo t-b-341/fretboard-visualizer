@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { Cell } from '../music/fretboard';
 import type { GuitarString } from '../music/tunings';
-import type { Chord } from '../music/chords';
+import type { Chord, ChordToneRole } from '../music/chords';
 import type { ViewMode } from '../music/types';
 import { mod, noteName } from '../music/notes';
 import { noteFillClass, noteTextClass } from '../music/highlight';
+import { signedSemitones } from '../music/voiceMotion';
 import { guideTonePcs, placeGuideVoices } from '../music/guide';
 import type { GuidePoint } from '../music/guide';
 import type { HighlightEvaluator } from '../state/derive';
@@ -59,8 +60,12 @@ interface Props {
    * Every other cell is a ghost scale tone, or nothing.
    */
   activeCells?: Set<string>;
-  /** Identify view: pick or clear the note at this string and fret. */
-  onPick?: (stringIndex: number, fret: number) => void;
+  /** Pick notes: place, move, or clear the note at this string and fret. */
+  onPick?: (stringIndex: number, fret: number, pc: number, midi: number) => void;
+  /** "stringIndex:fret" cells picked on the neck. Drawn with an identify ring. */
+  identifyCells?: ReadonlySet<string>;
+  /** Keyboard picks, drawn on the neck cell with that exact MIDI number. */
+  identifyMidis?: ReadonlySet<number>;
   /** Quiz view: answer the tone at this string and fret. */
   onQuizAnswer?: (stringIndex: number, fret: number, pc: number) => void;
   /** While interval reference is armed, a click sets or clears that pitch class. */
@@ -70,6 +75,13 @@ interface Props {
   /** MIDI notes held from an input, drawn at every position with that exact number. */
   showPlayed?: boolean;
   playedMidis?: ReadonlySet<number>;
+  /** Dashed rings and motion lines toward the next step. Omitted when voice motion is off. */
+  motion?: {
+    rings: { stringIndex: number; fret: number; role: ChordToneRole }[];
+    moves: { fromString: number; fromFret: number; toString: number; toFret: number; semitones: number }[];
+  } | null;
+  /** The scale note sounding right now, drawn on every cell with that MIDI number. */
+  soundingMidi?: number | null;
   /** Shown above the neck. Used for the tab of a single grip. */
   children?: ReactNode;
 }
@@ -120,6 +132,8 @@ export function Fretboard(props: Props) {
     guidePcs,
     activeCells,
     onPick,
+    identifyCells,
+    identifyMidis,
     onQuizAnswer,
     onReference,
     evaluate,
@@ -127,6 +141,8 @@ export function Fretboard(props: Props) {
     practice,
     showPlayed = false,
     playedMidis = NO_PLAYED,
+    motion = null,
+    soundingMidi = null,
     children,
   } = props;
 
@@ -214,15 +230,15 @@ export function Fretboard(props: Props) {
   const fretNums: number[] = [];
   for (let f = from; f <= to; f++) fretNums.push(f);
 
-  const play = (midi: number) => {
-    if (clickToHear) onPlay(midi);
-  };
-
-  const picking = !practice && viewMode === 'identify' && !!onPick;
+  const picking = !practice && !!onPick;
   const quizzing = !practice && viewMode === 'quiz' && !!onQuizAnswer;
 
-  const activate = (stringIndex: number, fret: number, midi: number) => {
-    if (picking) onPick(stringIndex, fret);
+  const play = (midi: number) => {
+    if (clickToHear || picking) onPlay(midi);
+  };
+
+  const activate = (stringIndex: number, fret: number, pc: number, midi: number) => {
+    if (picking) onPick(stringIndex, fret, pc, midi);
     onReference?.(mod(midi, 12));
     play(midi);
   };
@@ -239,6 +255,10 @@ export function Fretboard(props: Props) {
       positionWindow != null && (fret < positionWindow.min || fret > positionWindow.max);
     return [clickToHear || picking || quizzing || onReference ? 'note-hit' : '', outside ? 'outside-window' : ''].filter(Boolean).join(' ') || undefined;
   };
+
+  const sounding = (midi: number) => soundingMidi != null && midi === soundingMidi;
+  const roleClass = (role: ChordToneRole) =>
+    role === 'root' || role === 'third' || role === 'fifth' || role === 'seventh' ? role : 'ext';
 
   return (
     <div className="fretboard-wrap">
@@ -301,18 +321,19 @@ export function Fretboard(props: Props) {
             />
           ))}
 
-          {visible.map((si) => (
-            <text
-              key={`t-${si}`}
-              className="tuning-label"
-              x={X(LEFT_LABEL_X)}
-              y={stringY(si)}
-              textAnchor={leftHanded ? 'end' : 'start'}
-              dominantBaseline="central"
-            >
-              {noteName(mod(tuning[si].pc + shift, 12))}
-            </text>
-          ))}
+          {!practice &&
+            visible.map((si) => (
+              <text
+                key={`t-${si}`}
+                className="tuning-label"
+                x={X(LEFT_LABEL_X)}
+                y={stringY(si)}
+                textAnchor={leftHanded ? 'end' : 'start'}
+                dominantBaseline="central"
+              >
+                {noteName(mod(tuning[si].pc + shift, 12))}
+              </text>
+            ))}
 
           {fretNums.map((f) => (
             <text key={`fn-${f}`} className="fret-number" x={X(noteX(f))} y={height - 16} textAnchor="middle">
@@ -344,7 +365,9 @@ export function Fretboard(props: Props) {
               if (cell.fret < from || cell.fret > to) return null;
               const cellKey = `${cell.stringIndex}:${cell.fret}`;
               const played = showPlayed && playedMidis.has(cell.midi);
-              if (allow && !allow.has(cellKey) && !played) return null;
+              const identified =
+                (identifyCells?.has(cellKey) ?? false) || (identifyMidis?.has(cell.midi) ?? false);
+              if (allow && !allow.has(cellKey) && !played && !picking && !identified) return null;
               if (practice) {
                 const mark = practice.marks[cellKey];
                 if (!mark && !practice.heatmap && !practice.listen && !played) return null;
@@ -356,6 +379,8 @@ export function Fretboard(props: Props) {
                   <g
                     key={`n-${cell.stringIndex}-${cell.fret}`}
                     className={practice.listen ? 'note-hit' : undefined}
+                    data-midi={cell.midi}
+                    data-sounding={sounding(cell.midi) ? 'true' : undefined}
                     onClick={practice.listen ? click : undefined}
                   >
                     {mark || practice.heatmap ? (
@@ -390,12 +415,29 @@ export function Fretboard(props: Props) {
               const onCellClick = () =>
                 quizzing
                   ? answerQuiz(cell.stringIndex, cell.fret, cell.pc, cell.midi)
-                  : activate(cell.stringIndex, cell.fret, cell.midi);
+                  : activate(cell.stringIndex, cell.fret, cell.pc, cell.midi);
               if (!ev) {
-                if (!picking && !quizzing && !played) return null;
+                if (!picking && !quizzing && !played && !identified) return null;
                 return (
-                  <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
-                    {(picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />}
+                  <g
+                    key={key}
+                    className={noteClass(cell.fret)}
+                    data-midi={cell.midi}
+                    data-identify={identified ? 'true' : undefined}
+                    data-sounding={sounding(cell.midi) ? 'true' : undefined}
+                    onClick={onCellClick}
+                  >
+                    {identified ? (
+                      <>
+                        <circle className="note note-scale" cx={x} cy={y} r={R} />
+                        <circle className="note-identify-ring" cx={x} cy={y} r={R + 6} />
+                        <text className="note-label" x={x} y={y} textAnchor="middle" dominantBaseline="central">
+                          {noteName(mod(cell.pc + shift, 12))}
+                        </text>
+                      </>
+                    ) : (
+                      (picking || quizzing) && <circle className="note-target" cx={x} cy={y} r={R} />
+                    )}
                     <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
@@ -405,21 +447,35 @@ export function Fretboard(props: Props) {
                   <g
                     key={key}
                     className={noteClass(cell.fret)}
+                    data-midi={cell.midi}
+                    data-sounding={sounding(cell.midi) ? 'true' : undefined}
+                    data-identify={identified ? 'true' : undefined}
                     onClick={() => {
+                      if (picking) onPick(cell.stringIndex, cell.fret, cell.pc, cell.midi);
                       onReference?.(mod(cell.midi, 12));
                       play(cell.midi);
                     }}
                   >
                     <circle className="note-ghost" cx={x} cy={y} r={4.5} />
+                    {identified && <circle className="note-identify-ring" cx={x} cy={y} r={R + 6} />}
                     {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={9} />}
-                    {clickToHear && <circle className="note-target" cx={x} cy={y} r={R} />}
+                    {(clickToHear || picking) && <circle className="note-target" cx={x} cy={y} r={R} />}
                     <PlayedMark x={x} y={y} on={played} />
                   </g>
                 );
               }
               return (
-                <g key={key} className={noteClass(cell.fret)} onClick={onCellClick}>
+                <g
+                  key={key}
+                  className={noteClass(cell.fret)}
+                  data-midi={cell.midi}
+                  data-identify={identified ? 'true' : undefined}
+                  data-sounding={sounding(cell.midi) ? 'true' : undefined}
+                  onClick={onCellClick}
+                >
                   <circle className={noteFillClass(ev, degreeColors)} cx={x} cy={y} r={R} />
+                  {sounding(cell.midi) && <circle className="note-sounding" cx={x} cy={y} r={R + 5} />}
+                  {identified && <circle className="note-identify-ring" cx={x} cy={y} r={R + 6} />}
                   {ev.ring && <circle className="note-root-ring" cx={x} cy={y} r={R + 3} />}
                   {ev.reference && <circle className="note-reference-ring" cx={x} cy={y} r={R + 6} />}
                   {guidePcs?.has(cell.pc) && <circle className="note-guide-ring" cx={x} cy={y} r={R + 4} />}
@@ -438,6 +494,36 @@ export function Fretboard(props: Props) {
               );
             }),
           )}
+
+          {motion?.moves.map((move, index) => {
+            if (move.semitones === 0) return null;
+            if (hidden.has(move.fromString) || hidden.has(move.toString)) return null;
+            if (move.fromFret < from || move.fromFret > to || move.toFret < from || move.toFret > to) return null;
+            const x1 = X(noteX(move.fromFret));
+            const y1 = stringY(move.fromString);
+            const x2 = X(noteX(move.toFret));
+            const y2 = stringY(move.toString);
+            return (
+              <g key={`move-${index}`} className="voice-move">
+                <line className="motion-line" x1={x1} y1={y1} x2={x2} y2={y2} />
+                <text className="motion-label" x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 10} textAnchor="middle">
+                  {signedSemitones(move.semitones)}
+                </text>
+              </g>
+            );
+          })}
+          {motion?.rings.map((ring, index) => {
+            if (hidden.has(ring.stringIndex) || ring.fret < from || ring.fret > to) return null;
+            return (
+              <circle
+                key={`ring-${ring.stringIndex}-${ring.fret}-${index}`}
+                className={`motion-ring motion-ring-${roleClass(ring.role)}`}
+                cx={X(noteX(ring.fret))}
+                cy={stringY(ring.stringIndex)}
+                r={R + 5}
+              />
+            );
+          })}
         </svg>
       )}
     </div>

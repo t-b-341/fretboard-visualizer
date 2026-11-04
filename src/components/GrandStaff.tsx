@@ -1,18 +1,32 @@
+import { useEffect, useState } from 'react';
 import type { Chord } from '../music/chords';
 import { noteFillClass, type NoteHighlight } from '../music/highlight';
 import { mod } from '../music/notes';
 import {
   BASS_BOTTOM_STEP,
+  BASS_TOP_STEP,
   TREBLE_BOTTOM_STEP,
   TREBLE_TOP_STEP,
+  bassStaffOriginShift,
   keySignatureSpots,
+  measuresPerSystem,
   octaveMark,
   staffLayoutFor,
+  wrapMeasures,
   type LayoutNote,
   type StaffLayout,
   type StaffName,
+  type StaffSystem,
 } from '../music/staff';
 import type { LabelMode, ViewMode } from '../music/types';
+import { BASS_CLEF, BRAVURA_SPACE, TREBLE_CLEF } from './clefs';
+
+interface MeasureInput {
+  chord: Chord;
+  voicingMidis: number[] | null;
+  /** Chord symbol already shifted for Names. */
+  symbol: string;
+}
 
 interface Props {
   viewMode: ViewMode;
@@ -23,7 +37,8 @@ interface Props {
   voicingMidis: number[] | null;
   pickedMidis: number[];
   guitarWritten: boolean;
-  onGuitarWritten: (guitarWritten: boolean) => void;
+  /** Guitar writes on treble. 6-string bass writes on bass. */
+  writtenStaff: StaffName;
   labelMode: LabelMode;
   colorByDegree: boolean;
   compareEnabled: boolean;
@@ -32,34 +47,83 @@ interface Props {
   onPlay: (midi: number) => void;
   /** While interval reference is armed, a click sets or clears that pitch class. */
   onReference?: (pc: number) => void;
+  /** Every step, when the staff should show one measure per step. */
+  measures?: MeasureInput[] | null;
+  currentMeasure?: number;
+  onSelectMeasure?: (index: number) => void;
+  /** Scale name drawn on the single scale measure. */
+  scaleLabel?: string;
+  /** Dim every measure except the current one. */
+  dimRest?: boolean;
+  /** Index of the written scale note that is sounding. */
+  soundingDegree?: number | null;
+  /**
+   * While pick-notes is on, the current measure stacks these notes.
+   * Null leaves the measure alone.
+   */
+  identify?: { midis: readonly number[]; symbol: string } | null;
+  /** One note, spelled in the key. Omits the scale, the chord, and every other note. */
+  singleNote?: number | null;
 }
 
 const STEP = 6;
 const HEAD_RX = 7.6;
 const HEAD_RY = 5.2;
+const EIGHTH_RX = 5.5;
+const EIGHTH_RY = 4;
 const HEAD_SHIFT = 13;
-const ADVANCE = 48;
-const CLEF_W = 50;
-const SIG_W = 15;
-const ACC_W = 16;
-const RIGHT = 20;
+const CLEF_W = 46;
+const SIG_W = 14;
+const ACC_W = 15;
+const RIGHT = 18;
+const MIN_MEASURE = 84;
+const NARROW_QUERY = '(max-width: 900px)';
 
-function staffLabel(layout: StaffLayout): string {
-  const fifths = layout.signature.fifths;
-  const sig =
-    fifths === 0
-      ? 'no key signature'
-      : fifths > 0
-        ? `${fifths} ${fifths === 1 ? 'sharp' : 'sharps'}`
-        : `${-fifths} ${fifths === -1 ? 'flat' : 'flats'}`;
-  const system = layout.system === 'treble' ? 'Treble staff' : 'Grand staff';
-  const names = layout.notes
-    .map((note) => {
-      const mark = octaveMark(note.octaveShift);
-      return mark ? `${note.written.name} ${mark}` : note.written.name;
-    })
-    .join(' ');
-  return names ? `${system}, ${sig}: ${names}` : `${system}, ${sig}`;
+/** G4, the treble clef's curl. Two steps above the treble bottom line E4. */
+const G_LINE = TREBLE_BOTTOM_STEP + 2;
+/** F3, the bass clef's dots. Six steps above the bass bottom line G2. */
+const F_LINE = BASS_BOTTOM_STEP + 6;
+
+interface DrawnMeasure {
+  index: number;
+  symbol: string;
+  current: boolean;
+  layout: StaffLayout;
+}
+
+interface MeasureBox extends DrawnMeasure {
+  left: number;
+  notesLeft: number;
+  right: number;
+  span: number;
+}
+
+interface Frame {
+  system: StaffSystem;
+  yOf: (step: number, staff: StaffName) => number;
+  top: number;
+  bottom: number;
+  height: number;
+}
+
+function useNarrowScreen(): boolean {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_QUERY);
+    const onChange = () => setNarrow(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
+function staffAria(symbol: string, layout: StaffLayout): string {
+  const names = layout.notes.map((note) => note.written.name).join(' ');
+  if (symbol && names) return `Staff, ${symbol}: ${names}`;
+  if (names) return `Staff: ${names}`;
+  if (symbol) return `Staff, ${symbol}`;
+  return 'Staff';
 }
 
 function SharpGlyph() {
@@ -110,44 +174,136 @@ function AccidentalMark({ value, x, y }: { value: number; x: number; y: number }
   );
 }
 
-/** Unicode clefs. Segoe UI Symbol (and the usual fallbacks) draw 𝄞 and 𝄢. */
-function TrebleClef({ x, y }: { x: number; y: number }) {
+function Clef({ name, x, y }: { name: StaffName; x: number; y: number }) {
+  const scale = (STEP * 2) / BRAVURA_SPACE;
   return (
-    <text className="staff-clef-glyph staff-clef-treble" x={x} y={y}>
-      {'\u{1D11E}'}
-    </text>
-  );
-}
-
-function BassClef({ x, y }: { x: number; y: number }) {
-  return (
-    <text className="staff-clef-glyph staff-clef-bass" x={x} y={y}>
-      {'\u{1D122}'}
-    </text>
+    <g className={`staff-clef staff-clef-${name}`} transform={`translate(${x} ${y}) scale(${scale} ${-scale})`}>
+      <path d={name === 'treble' ? TREBLE_CLEF : BASS_CLEF} />
+    </g>
   );
 }
 
 function Brace({ x, top, bottom }: { x: number; top: number; bottom: number }) {
   const mid = (top + bottom) / 2;
-  const tip = x - 13;
+  const tip = x - 14;
   const d = [
     `M ${x} ${top}`,
-    `C ${x - 10} ${top + 18}, ${x - 7} ${mid - 32}, ${tip + 3} ${mid - 7}`,
-    `Q ${tip - 3} ${mid}, ${tip + 3} ${mid + 7}`,
-    `C ${x - 7} ${mid + 32}, ${x - 10} ${bottom - 18}, ${x} ${bottom}`,
+    `C ${x - 11} ${top + 22}, ${x - 8} ${mid - 36}, ${tip + 3} ${mid - 8}`,
+    `Q ${tip - 4} ${mid}, ${tip + 3} ${mid + 8}`,
+    `C ${x - 8} ${mid + 36}, ${x - 11} ${bottom - 22}, ${x} ${bottom}`,
   ].join(' ');
   return <path className="staff-brace" d={d} />;
 }
 
-function StaffLines({ bottom, x1, x2, yOf }: { bottom: number; x1: number; x2: number; yOf: (step: number) => number }) {
+function StaffLines({
+  staff,
+  x1,
+  x2,
+  yOf,
+}: {
+  staff: StaffName;
+  x1: number;
+  x2: number;
+  yOf: (step: number, staff: StaffName) => number;
+}) {
+  const bottom = staff === 'treble' ? TREBLE_BOTTOM_STEP : BASS_BOTTOM_STEP;
   return (
     <>
       {Array.from({ length: 5 }, (_, i) => {
-        const y = yOf(bottom + i * 2);
-        return <line key={i} className="staff-line" x1={x1} y1={y} x2={x2} y2={y} />;
+        const y = yOf(bottom + i * 2, staff);
+        return <line key={i} className="staff-line" data-staff={staff} x1={x1} y1={y} x2={x2} y2={y} />;
       })}
     </>
   );
+}
+
+function stavesOf(system: StaffSystem): StaffName[] {
+  if (system === 'grand') return ['treble', 'bass'];
+  return system === 'bass' ? ['bass'] : ['treble'];
+}
+
+/**
+ * Pixel frame for one system. Bass notes on a grand staff use bassStaffOriginShift
+ * and nothing else, so a ledger line keeps the staffStep placeNotes already chose.
+ */
+function frameFor(layouts: StaffLayout[], y0: number): Frame {
+  const system = layouts[0]?.system ?? 'grand';
+  const clefEight = layouts.some((layout) => layout.clefEight);
+  const upper: StaffName = system === 'bass' ? 'bass' : 'treble';
+  const upperTop = upper === 'bass' ? BASS_TOP_STEP : TREBLE_TOP_STEP;
+  const upperBottom = upper === 'bass' ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP;
+  let upperHi = upperTop;
+  let upperLo = upperBottom;
+  let bassLo = BASS_BOTTOM_STEP;
+  let ottavaAbove = false;
+  let ottavaBelow = false;
+
+  for (const layout of layouts) {
+    for (const note of layout.notes) {
+      if (note.octaveShift < 0) ottavaAbove = true;
+      if (note.octaveShift > 0) ottavaBelow = true;
+      const steps = [note.drawStep, ...note.ledgerSteps];
+      if (system === 'grand' && note.staff === 'bass') {
+        for (const step of steps) bassLo = Math.min(bassLo, step);
+      } else {
+        for (const step of steps) {
+          upperHi = Math.max(upperHi, step);
+          upperLo = Math.min(upperLo, step);
+        }
+      }
+    }
+  }
+
+  const padTop = 34 + (ottavaAbove ? 16 : 0);
+  // The treble clef curls below the staff, so its 8 needs more room than the bass clef's.
+  const padBottom = 24 + (ottavaBelow ? 14 : 0) + (clefEight ? (system === 'bass' ? 14 : 28) : 0);
+  const shift = system === 'grand' ? bassStaffOriginShift() : 0;
+  const yOf = (step: number, staff: StaffName) => {
+    const extra = system === 'grand' && staff === 'bass' ? shift : 0;
+    return y0 + padTop + (upperHi - step + extra) * STEP;
+  };
+  const top = yOf(upperTop, upper);
+  const bottom = system === 'grand' ? yOf(BASS_BOTTOM_STEP, 'bass') : yOf(upperBottom, upper);
+  const lowest = system === 'grand' ? yOf(Math.min(bassLo, BASS_BOTTOM_STEP), 'bass') : yOf(upperLo, upper);
+  return { system, yOf, top, bottom, height: lowest + padBottom - y0 };
+}
+
+function measureBoxes(measures: DrawnMeasure[], barX: number): MeasureBox[] {
+  const sigCount = Math.abs(measures[0]?.layout.signature.fifths ?? 0);
+  let cursor = barX + CLEF_W + sigCount * SIG_W;
+  return measures.map((measure) => {
+    const { layout } = measure;
+    const run = layout.placement === 'run';
+    const accCols = layout.notes.reduce(
+      (max, note) => Math.max(max, note.accidental === null ? 0 : note.accidentalColumn + 1),
+      0,
+    );
+    const headCols = layout.notes.reduce((max, note) => Math.max(max, note.headColumn), 0);
+    const left = cursor;
+    let notesLeft: number;
+    let right: number;
+    let span = 0;
+    if (run) {
+      const count = Math.max(layout.notes.length, 1);
+      span = Math.max(112, (count - 1) * 28);
+      notesLeft = cursor + 24;
+      right = notesLeft + span + 28;
+    } else {
+      notesLeft = cursor + 20 + accCols * ACC_W;
+      right = Math.max(notesLeft + headCols * HEAD_SHIFT + 40, cursor + MIN_MEASURE);
+    }
+    cursor = right;
+    return { ...measure, left, notesLeft, right, span };
+  });
+}
+
+function noteX(box: MeasureBox, index: number, note: LayoutNote): number {
+  if (box.layout.placement === 'run') {
+    const count = box.layout.notes.length;
+    if (count <= 1) return box.notesLeft + box.span / 2;
+    return box.notesLeft + (index / (count - 1)) * box.span;
+  }
+  return box.notesLeft + note.headColumn * HEAD_SHIFT;
 }
 
 export function GrandStaff(props: Props) {
@@ -159,7 +315,7 @@ export function GrandStaff(props: Props) {
     voicingMidis,
     pickedMidis,
     guitarWritten,
-    onGuitarWritten,
+    writtenStaff,
     labelMode,
     colorByDegree,
     compareEnabled,
@@ -167,61 +323,110 @@ export function GrandStaff(props: Props) {
     evaluate,
     onPlay,
     onReference,
+    measures = null,
+    currentMeasure = 0,
+    onSelectMeasure,
+    scaleLabel = '',
+    dimRest = false,
+    soundingDegree = null,
+    identify = null,
+    singleNote = null,
   } = props;
 
-  const layout = staffLayoutFor({
+  const narrow = useNarrowScreen();
+  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
+  const stepped = !!(measures && measures.length > 0 && (viewMode === 'chord' || viewMode === 'triad'));
+  const identifying = identify != null;
+  const source = {
     viewMode,
     rootPc,
     intervals,
-    chord,
-    voicingMidis,
     pickedMidis,
     guitarWritten,
+    writtenStaff,
+  };
+
+  const drawn: DrawnMeasure[] =
+    typeof singleNote === 'number'
+      ? [
+          {
+            index: 0,
+            symbol: '',
+            current: true,
+            layout: staffLayoutFor({
+              viewMode: 'identify',
+              rootPc,
+              intervals,
+              chord: null,
+              voicingMidis: null,
+              pickedMidis: [singleNote],
+              guitarWritten,
+              writtenStaff,
+            }),
+          },
+        ]
+      : stepped
+    ? measures.map((measure, index) => {
+        const current = index === Math.min(Math.max(currentMeasure, 0), measures.length - 1);
+        const picked = identifying && current;
+        return {
+          index,
+          symbol: picked ? identify.symbol : measure.symbol,
+          current,
+          layout: staffLayoutFor(
+            picked
+              ? {
+                  ...source,
+                  viewMode: 'identify',
+                  pickedMidis: identify.midis,
+                  chord: measure.chord,
+                  voicingMidis: null,
+                }
+              : {
+                  ...source,
+                  viewMode: viewMode === 'triad' ? 'triad' : 'chord',
+                  chord: measure.chord,
+                  voicingMidis: measure.voicingMidis,
+                  pickedMidis: [],
+                },
+          ),
+        };
+      })
+    : [
+        {
+          index: 0,
+          symbol: identifying ? identify.symbol : viewMode === 'scale' ? scaleLabel : '',
+          current: true,
+          layout: identifying
+            ? staffLayoutFor({
+                ...source,
+                viewMode: 'identify',
+                pickedMidis: identify.midis,
+                chord,
+                voicingMidis: null,
+              })
+            : staffLayoutFor({ ...source, chord, voicingMidis }),
+        },
+      ];
+
+  const ranges = stepped ? wrapMeasures(drawn.length, measuresPerSystem(narrow)) : [{ start: 0, end: drawn.length }];
+  const current = drawn.find((measure) => measure.current) ?? drawn[0];
+
+  let y0 = 0;
+  const systems = ranges.map((range) => {
+    const slice = drawn.slice(range.start, range.end);
+    const frame = frameFor(slice.map((measure) => measure.layout), y0);
+    const grand = frame.system === 'grand';
+    const barX = grand ? 28 : 10;
+    const boxes = measureBoxes(slice, barX);
+    const endX = boxes.length > 0 ? boxes[boxes.length - 1].right : barX + CLEF_W + 80;
+    const system = { frame, barX, boxes, endX, y0 };
+    y0 += frame.height + 22;
+    return system;
   });
-  const degreeColors = colorByDegree && viewMode === 'scale' && !compareEnabled;
-  const grand = layout.system === 'grand';
 
-  let maxStep = TREBLE_TOP_STEP;
-  let minStep = grand ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP;
-  for (const note of layout.notes) {
-    maxStep = Math.max(maxStep, note.drawStep);
-    minStep = Math.min(minStep, note.drawStep);
-    for (const step of note.ledgerSteps) {
-      maxStep = Math.max(maxStep, step);
-      minStep = Math.min(minStep, step);
-    }
-  }
-  const hasOttava = layout.notes.some((note) => note.octaveShift > 0);
-  maxStep += 6;
-  minStep -= hasOttava ? 5 : 3;
-  const yOf = (step: number) => (maxStep - step) * STEP + 4;
-  const height = yOf(minStep) + 12;
-
-  const sigCount = Math.abs(layout.signature.fifths);
-  const maxAccCol = layout.notes.reduce((max, note) => Math.max(max, note.accidentalColumn), 0);
-  const maxHead = layout.notes.reduce((max, note) => Math.max(max, note.headColumn), 0);
-  const barX = grand ? 30 : 12;
-  const notesLeft =
-    barX + CLEF_W + sigCount * SIG_W + 18 + (layout.placement === 'stack' ? maxAccCol * ACC_W : 0);
-  const lastX =
-    layout.notes.length === 0
-      ? notesLeft
-      : layout.placement === 'run'
-        ? notesLeft + (layout.notes.length - 1) * ADVANCE
-        : notesLeft + maxHead * HEAD_SHIFT;
-  const endX = Math.max(lastX + 34, barX + 148);
-  const width = endX + RIGHT;
-
-  const noteX = (index: number, column: number) =>
-    layout.placement === 'run' ? notesLeft + index * ADVANCE + column * HEAD_SHIFT : notesLeft + column * HEAD_SHIFT;
-
-  const markFor = new Map<string, LayoutNote>();
-  for (const note of layout.notes) {
-    if (note.octaveShift <= 0) continue;
-    const key = `${note.staff}:${note.octaveShift}`;
-    const prev = markFor.get(key);
-    if (!prev || note.drawStep < prev.drawStep) markFor.set(key, note);
-  }
+  const width = Math.max(...systems.map((system) => system.endX), 160) + RIGHT;
+  const height = Math.max(y0 - 22, 40);
 
   const play = (midi: number) => {
     if (clickToHear) onPlay(midi);
@@ -232,141 +437,242 @@ export function GrandStaff(props: Props) {
   };
 
   const hint =
-    layout.notes.length > 0
-      ? null
-      : viewMode === 'chord' || viewMode === 'triad'
-        ? 'Choose a chord and it stacks on the staff.'
-        : viewMode === 'identify'
-          ? 'Pick notes on the neck and they stack here.'
-          : null;
-
-  const gLine = yOf(TREBLE_BOTTOM_STEP + 2);
-  const fLine = yOf(BASS_BOTTOM_STEP + 6);
+    drawn.every((measure) => measure.layout.notes.length === 0)
+      ? identifying
+        ? 'Pick notes on the neck and they stack here.'
+        : viewMode === 'chord' || viewMode === 'triad'
+          ? 'Choose a chord and it stacks on the staff.'
+          : viewMode === 'identify'
+            ? 'Pick notes on the neck and they stack here.'
+            : null
+      : null;
 
   return (
     <div className="staff-wrap">
-      <div className="staff-toolbar">
-        <div className="segmented" role="group" aria-label="Staff pitch">
-          <button
-            type="button"
-            className={guitarWritten ? '' : 'active'}
-            aria-pressed={!guitarWritten}
-            onClick={() => onGuitarWritten(false)}
-          >
-            Concert pitch
-          </button>
-          <button
-            type="button"
-            className={guitarWritten ? 'active' : ''}
-            aria-pressed={guitarWritten}
-            onClick={() => onGuitarWritten(true)}
-          >
-            Guitar written
-          </button>
-        </div>
-        <p className="staff-toolbar-note">
-          {guitarWritten
-            ? 'Written an octave higher, on a treble clef with an 8. It sounds an octave lower.'
-            : 'Sounding pitch, on the grand staff.'}
-        </p>
-      </div>
       <svg
         className={clickToHear ? 'staff staff-live' : 'staff'}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={staffLabel(layout)}
+        aria-label={staffAria(current?.symbol ?? '', current?.layout ?? drawn[0].layout)}
       >
-        {grand && <Brace x={barX - 6} top={yOf(TREBLE_TOP_STEP)} bottom={yOf(BASS_BOTTOM_STEP)} />}
-        <StaffLines bottom={TREBLE_BOTTOM_STEP} x1={barX} x2={endX} yOf={yOf} />
-        {grand && <StaffLines bottom={BASS_BOTTOM_STEP} x1={barX} x2={endX} yOf={yOf} />}
-        <line className="staff-bar" x1={barX} y1={yOf(TREBLE_TOP_STEP)} x2={barX} y2={yOf(grand ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP)} />
-        <line className="staff-bar" x1={endX} y1={yOf(TREBLE_TOP_STEP)} x2={endX} y2={yOf(grand ? BASS_BOTTOM_STEP : TREBLE_BOTTOM_STEP)} />
-        <TrebleClef x={barX + 6} y={gLine + 28} />
-        {guitarWritten && (
-          <text className="staff-clef-eight" x={barX + 24} y={yOf(TREBLE_BOTTOM_STEP) + 18} textAnchor="middle">
-            8
-          </text>
-        )}
-        {grand && <BassClef x={barX + 8} y={fLine + 18} />}
-        {(['treble', 'bass'] as StaffName[]).map((staff) => {
-          if (staff === 'bass' && !grand) return null;
-          return keySignatureSpots(layout.signature, staff).map((spot, i) => (
-            <AccidentalMark
-              key={`${staff}-${spot.step}`}
-              value={spot.accidental}
-              x={barX + CLEF_W + i * SIG_W}
-              y={yOf(spot.step)}
-            />
-          ));
-        })}
-        {layout.notes.map((note, index) =>
-          note.ledgerSteps.map((step) => {
-            const x = noteX(index, note.headColumn);
-            const y = yOf(step);
-            return (
-              <line
-                key={`${note.written.name}-${index}-${step}`}
-                className="staff-ledger"
-                x1={x - 14}
-                y1={y}
-                x2={x + 14}
-                y2={y}
-              />
-            );
-          }),
-        )}
-        {layout.notes.map((note, index) => {
-          if (note.accidental === null) return null;
-          const base = layout.placement === 'run' ? notesLeft + index * ADVANCE : notesLeft;
+        {systems.map((system, systemIndex) => {
+          const { frame, barX, boxes, endX } = system;
+          const staves = stavesOf(frame.system);
+          const signature = boxes[0]?.layout.signature;
+          const clefEight = boxes.some((box) => box.layout.clefEight);
+          const clefX = barX + 8;
           return (
-            <AccidentalMark
-              key={`acc-${note.written.name}-${index}`}
-              value={note.accidental}
-              x={base - 18 - note.accidentalColumn * ACC_W}
-              y={yOf(note.drawStep)}
-            />
-          );
-        })}
-        {layout.notes.map((note, index) => {
-          const marked = markFor.get(`${note.staff}:${note.octaveShift}`);
-          if (marked !== note) return null;
-          const mark = octaveMark(note.octaveShift);
-          if (!mark) return null;
-          const x = noteX(index, note.headColumn);
-          return (
-            <text key={`ottava-${index}`} className="staff-ottava" x={x} y={yOf(note.drawStep) + 20} textAnchor="middle">
-              {mark}
-            </text>
-          );
-        })}
-        {layout.notes.map((note, index) => {
-          const x = noteX(index, note.headColumn);
-          const y = yOf(note.drawStep);
-          const ev = evaluate(mod(note.midi, 12), { placed: true, midi: note.midi });
-          const fill = ev ? noteFillClass(ev, degreeColors) : 'note note-scale';
-          const mark = octaveMark(note.octaveShift);
-          const title = mark ? `${note.written.name}, ${mark}` : note.written.name;
-          return (
-            <g key={`head-${note.written.name}-${index}-${note.midi}`} onClick={() => press(note.midi)}>
-              <title>{title}</title>
-              <ellipse className={`${fill} staff-notehead`} cx={x} cy={y} rx={HEAD_RX} ry={HEAD_RY} transform={`rotate(-18 ${x} ${y})`} />
-              {ev?.ring && (
-                <ellipse className="note-root-ring" cx={x} cy={y} rx={HEAD_RX + 3.2} ry={HEAD_RY + 2.4} transform={`rotate(-18 ${x} ${y})`} />
+            <g key={systemIndex} className="staff-system" data-system-index={systemIndex}>
+              {frame.system === 'grand' && <Brace x={barX - 6} top={frame.top} bottom={frame.bottom} />}
+              {staves.map((staff) => (
+                <StaffLines key={staff} staff={staff} x1={barX} x2={endX} yOf={frame.yOf} />
+              ))}
+              <line className="staff-bar" x1={barX} y1={frame.top} x2={barX} y2={frame.bottom} />
+              <line className="staff-bar" x1={endX} y1={frame.top} x2={endX} y2={frame.bottom} />
+              {staves.includes('treble') && <Clef name="treble" x={clefX} y={frame.yOf(G_LINE, 'treble')} />}
+              {staves.includes('bass') && <Clef name="bass" x={clefX + 2} y={frame.yOf(F_LINE, 'bass')} />}
+              {clefEight && (
+                <text
+                  className="staff-clef-eight"
+                  x={clefX + 16}
+                  y={
+                    (staves.includes('treble')
+                      ? frame.yOf(TREBLE_BOTTOM_STEP, 'treble') + 44
+                      : frame.yOf(BASS_BOTTOM_STEP, 'bass') + 16)
+                  }
+                  textAnchor="middle"
+                >
+                  8
+                </text>
               )}
-              {ev?.reference && (
-                <ellipse className="note-reference-ring" cx={x} cy={y} rx={HEAD_RX + 5.4} ry={HEAD_RY + 4} transform={`rotate(-18 ${x} ${y})`} />
-              )}
-              {ev?.outside && (
-                <ellipse className="note-outside-ring" cx={x} cy={y} rx={HEAD_RX + 3.2} ry={HEAD_RY + 2.4} transform={`rotate(-18 ${x} ${y})`} />
-              )}
+              {signature &&
+                staves.map((staff) =>
+                  keySignatureSpots(signature, staff).map((spot, index) => (
+                    <AccidentalMark
+                      key={`${staff}-${spot.step}`}
+                      value={spot.accidental}
+                      x={barX + CLEF_W + index * SIG_W}
+                      y={frame.yOf(spot.step, staff)}
+                    />
+                  )),
+                )}
+              {boxes.map((box) => {
+                const eighth = box.layout.placement === 'run';
+                const rx = eighth ? EIGHTH_RX : HEAD_RX;
+                const ry = eighth ? EIGHTH_RY : HEAD_RY;
+                const classes = ['staff-measure'];
+                if (box.current) classes.push('is-current');
+                if (dimRest && !box.current) classes.push('is-dim');
+                const select = () => {
+                  if (stepped) onSelectMeasure?.(box.index);
+                };
+                return (
+                  <g
+                    key={box.index}
+                    className={classes.join(' ')}
+                    data-measure-index={box.index}
+                    onClick={select}
+                  >
+                    {box.current && (
+                      <rect
+                        className="staff-current"
+                        x={box.left}
+                        y={frame.top - 10}
+                        width={Math.max(1, box.right - box.left)}
+                        height={frame.bottom - frame.top + 20}
+                      />
+                    )}
+                    <rect
+                      className="staff-measure-hit"
+                      x={box.left}
+                      y={frame.top - 26}
+                      width={Math.max(1, box.right - box.left)}
+                      height={frame.bottom - frame.top + 44}
+                      fill="transparent"
+                    />
+                    {box.index > boxes[0].index && (
+                      <line className="staff-bar" x1={box.left} y1={frame.top} x2={box.left} y2={frame.bottom} />
+                    )}
+                    {box.symbol && (
+                      <text className="staff-chord" x={(box.left + box.right) / 2} y={frame.top - 12} textAnchor="middle">
+                        {box.symbol}
+                      </text>
+                    )}
+                    {box.layout.notes.map((note, index) =>
+                      note.ledgerSteps.map((step) => {
+                        const x = noteX(box, index, note);
+                        const y = frame.yOf(step, note.staff);
+                        return (
+                          <line
+                            key={`${note.written.name}-${index}-${step}`}
+                            className="staff-ledger"
+                            x1={x - 12}
+                            y1={y}
+                            x2={x + 12}
+                            y2={y}
+                          />
+                        );
+                      }),
+                    )}
+                    {box.layout.notes.map((note, index) => {
+                      if (note.accidental === null) return null;
+                      const x = noteX(box, index, note);
+                      return (
+                        <AccidentalMark
+                          key={`acc-${note.written.name}-${index}`}
+                          value={note.accidental}
+                          x={x - 16 - note.accidentalColumn * ACC_W}
+                          y={frame.yOf(note.drawStep, note.staff)}
+                        />
+                      );
+                    })}
+                    {box.layout.notes.map((note, index) => {
+                      const mark = octaveMark(note.octaveShift);
+                      if (!mark) return null;
+                      const earlier = box.layout.notes.some(
+                        (other, otherIndex) =>
+                          otherIndex < index && other.staff === note.staff && other.octaveShift === note.octaveShift,
+                      );
+                      if (earlier) return null;
+                      const x = noteX(box, index, note);
+                      const y = frame.yOf(note.drawStep, note.staff);
+                      return (
+                        <text
+                          key={`ottava-${index}`}
+                          className="staff-ottava"
+                          x={x}
+                          y={note.octaveShift < 0 ? y - 14 : y + 18}
+                          textAnchor="middle"
+                        >
+                          {mark}
+                        </text>
+                      );
+                    })}
+                    {box.layout.notes.map((note, index) => {
+                      const x = noteX(box, index, note);
+                      const y = frame.yOf(note.drawStep, note.staff);
+                      const ev = box.current
+                        ? evaluate(mod(note.midi, 12), { placed: true, midi: note.midi })
+                        : null;
+                      const fill =
+                        box.current && ev ? noteFillClass(ev, degreeColors && eighth) : 'staff-notehead-ink';
+                      const mark = octaveMark(note.octaveShift);
+                      const title = mark ? `${note.written.name}, ${mark}` : note.written.name;
+                      const sounding = eighth && soundingDegree === index;
+                      return (
+                        <g
+                          key={`head-${index}-${note.midi}`}
+                          data-midi={note.midi}
+                          data-sounding={sounding ? 'true' : undefined}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            select();
+                            press(note.midi);
+                          }}
+                        >
+                          <title>{title}</title>
+                          <ellipse
+                            className={`${fill} staff-notehead`}
+                            cx={x}
+                            cy={y}
+                            rx={rx}
+                            ry={ry}
+                            transform={`rotate(-18 ${x} ${y})`}
+                          />
+                          {sounding && (
+                            <ellipse
+                              className="note-sounding"
+                              cx={x}
+                              cy={y}
+                              rx={rx + 4}
+                              ry={ry + 3}
+                              transform={`rotate(-18 ${x} ${y})`}
+                            />
+                          )}
+                          {ev?.ring && (
+                            <ellipse
+                              className="note-root-ring"
+                              cx={x}
+                              cy={y}
+                              rx={rx + 3.2}
+                              ry={ry + 2.4}
+                              transform={`rotate(-18 ${x} ${y})`}
+                            />
+                          )}
+                          {ev?.reference && (
+                            <ellipse
+                              className="note-reference-ring"
+                              cx={x}
+                              cy={y}
+                              rx={rx + 5.4}
+                              ry={ry + 4}
+                              transform={`rotate(-18 ${x} ${y})`}
+                            />
+                          )}
+                          {ev?.outside && (
+                            <ellipse
+                              className="note-outside-ring"
+                              cx={x}
+                              cy={y}
+                              rx={rx + 3.2}
+                              ry={ry + 2.4}
+                              transform={`rotate(-18 ${x} ${y})`}
+                            />
+                          )}
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
             </g>
           );
         })}
       </svg>
       {labelMode === 'standard' && (
-        <p className="staff-footnote">Staff shows concert pitch. Standard names are a semitone higher.</p>
+        <p className="staff-footnote">Staff shows real pitch. Standard names are a semitone higher.</p>
       )}
       {hint && <p className="staff-footnote">{hint}</p>}
     </div>

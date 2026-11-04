@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { player } from '../audio/player';
 import type { Cell } from '../music/fretboard';
 import { mulberry32 } from '../music/progression';
@@ -25,6 +25,7 @@ import {
   type QuizKey,
 } from '../music/quiz';
 import type { PracticeMark, PracticeOverlay } from './Fretboard';
+import { PracticeTab } from './layout/PracticeTab';
 
 const ASK = '#4c8dff';
 const ROOT_FILL = '#e6b422';
@@ -38,6 +39,8 @@ const KIND_LABEL: Record<NoteQuizKind | 'intervalReverse', string> = {
   intervalFromRoot: 'Interval',
   intervalReverse: 'Find interval',
   earInterval: 'Ear',
+  chordTone: 'Chord tone',
+  readStaff: 'Staff',
 };
 
 interface Draft {
@@ -301,7 +304,9 @@ export function useNoteQuiz(args: {
   }, []);
 
   const submitName = (name: string) => {
-    if (!question || phase !== 'ask' || question.type !== 'nameNote') return;
+    if (!question || phase !== 'ask') return;
+    if (question.type !== 'nameNote' && question.type !== 'readStaff') return;
+    if (!name.trim()) return;
     finish(gradeAnswer(question, { name }, pool, shift, key));
   };
 
@@ -323,13 +328,17 @@ export function useNoteQuiz(args: {
       });
       return;
     }
-    if (question.type === 'intervalFromRoot' && question.reverse) {
+    if (
+      question.type === 'chordTone' ||
+      question.type === 'readStaff' ||
+      (question.type === 'intervalFromRoot' && question.reverse)
+    ) {
       finish(gradeAnswer(question, { cells: [found] }, pool, shift, key));
     }
   };
 
   const submitCells = () => {
-    if (!question || phase !== 'ask' || question.type !== 'findNote') return;
+    if (!question || phase !== 'ask' || question.type !== 'findNote' || picked.length === 0) return;
     finish(gradeAnswer(question, { cells: picked }, pool, shift, key));
   };
 
@@ -355,7 +364,12 @@ export function useNoteQuiz(args: {
   );
 
   const typesOn =
-    settings.types.nameNote || settings.types.findNote || settings.types.intervalFromRoot || settings.types.earInterval;
+    settings.types.nameNote ||
+    settings.types.findNote ||
+    settings.types.intervalFromRoot ||
+    settings.types.earInterval ||
+    settings.types.chordTone ||
+    settings.types.readStaff;
   const empty = !enabled || !booted ? null : !typesOn ? 'types' : pool.length === 0 ? 'range' : question == null ? 'interval' : null;
 
   const weakest = useMemo(
@@ -375,7 +389,13 @@ export function useNoteQuiz(args: {
   );
 
   const listening =
-    !heatmap && phase === 'ask' && !!question && (question.type === 'findNote' || (question.type === 'intervalFromRoot' && question.reverse));
+    !heatmap &&
+    phase === 'ask' &&
+    !!question &&
+    (question.type === 'findNote' ||
+      question.type === 'chordTone' ||
+      question.type === 'readStaff' ||
+      (question.type === 'intervalFromRoot' && question.reverse));
 
   return {
     practice: enabled ? { marks, heatmap, listen: listening, onCell } : null,
@@ -404,29 +424,43 @@ interface Props {
   settings: NoteQuizSettings;
   numStrings: number;
   fretCount: number;
-  neckFrom: number;
-  neckTo: number;
   shift: number;
   musicalKey: QuizKey | null;
   stringLabels: string[];
-  keyLabel: string;
   onSettings: (settings: NoteQuizSettings) => void;
+  neck: ReactNode;
+  staff: ReactNode;
 }
+
+function isFormField(target: EventTarget | null): target is HTMLElement {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target.isContentEditable;
+}
+
+const QUESTION_TYPES: readonly [NoteQuizKind, string][] = [
+  ['nameNote', 'Name the note'],
+  ['findNote', 'Find every note'],
+  ['intervalFromRoot', 'Intervals from a root'],
+  ['earInterval', 'Ear intervals'],
+  ['chordTone', 'Chord tones'],
+  ['readStaff', 'Read from the staff'],
+];
 
 export function Quiz({
   api,
   settings,
   numStrings,
   fretCount,
-  neckFrom,
-  neckTo,
   shift,
   musicalKey,
   stringLabels,
-  keyLabel,
   onSettings,
+  neck,
+  staff,
 }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const pad = padNames(shift, settings.keyContext === 'key' ? musicalKey : null);
 
   useEffect(() => {
@@ -434,27 +468,29 @@ export function Quiz({
   }, [api.question?.id]);
 
   useEffect(() => {
+    if (api.phase === 'feedback') cardRef.current?.focus({ preventScroll: true });
+  }, [api.phase, api.question?.id, api.feedback]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+      const answerField = event.target instanceof HTMLElement && event.target.dataset.quizAnswer === 'true';
+      const tag = event.target instanceof HTMLElement ? event.target.tagName : '';
       if (event.key === 'Enter') {
+        if ((tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && !answerField) return;
+        event.preventDefault();
         if (api.phase === 'feedback') {
-          event.preventDefault();
           api.next();
           return;
         }
+        if (api.heatmap) return;
         if (api.question?.type === 'findNote') {
-          event.preventDefault();
           api.submitCells();
           return;
         }
-        if (api.question?.type === 'nameNote' && draft) {
-          event.preventDefault();
-          api.submitName(formatDraft(draft));
-        }
+        if (api.question?.type === 'nameNote' && draft) api.submitName(formatDraft(draft));
         return;
       }
+      if (isFormField(event.target)) return;
       if (api.phase !== 'ask' || api.question?.type !== 'nameNote' || api.heatmap) return;
       if (event.key === 'Backspace') {
         event.preventDefault();
@@ -476,12 +512,16 @@ export function Quiz({
         setDraft({ letter: event.key.toUpperCase(), acc: 0 });
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [api, draft]);
 
   const question = api.question;
-  const showNamePad = question && question.type === 'nameNote' && api.phase === 'ask' && !api.heatmap;
+  const showNamePad =
+    question &&
+    (question.type === 'nameNote' || question.type === 'readStaff') &&
+    api.phase === 'ask' &&
+    !api.heatmap;
   const showIntervalPad =
     question &&
     api.phase === 'ask' &&
@@ -489,7 +529,11 @@ export function Quiz({
     (question.type === 'earInterval' || (question.type === 'intervalFromRoot' && !question.reverse));
   const kind = question ? (question.reverse ? 'intervalReverse' : question.type) : null;
   const accuracy = api.session.count === 0 ? '—' : `${Math.round((100 * api.session.correct) / api.session.count)}%`;
-  const neckClipped = settings.fretMin < neckFrom || settings.fretMax > neckTo;
+  const targetPc = question?.answerCells[0]?.pc;
+  const answerWith = (run: () => void) => {
+    run();
+    cardRef.current?.focus({ preventScroll: true });
+  };
 
   const toggleString = (index: number) => {
     const has = settings.strings.includes(index);
@@ -504,115 +548,144 @@ export function Quiz({
   };
 
   return (
-    <section className="note-quiz" aria-label="Note quiz">
-      <div className="quiz-session" aria-label="Session">
-        <span>
-          <strong data-quiz-count={api.session.count}>{api.session.count}</strong> answered
-        </span>
-        <span>
-          Accuracy <strong>{accuracy}</strong>
-        </span>
-        <span>
-          Median <strong>{formatMs(api.session.medianMs)}</strong>
-        </span>
-        <span className="muted">{api.saved} saved</span>
-        <button
-          type="button"
-          className={api.heatmap ? 'btn-mini active' : 'btn-mini'}
-          aria-pressed={api.heatmap}
-          onClick={() => api.setHeatmap(!api.heatmap)}
-        >
-          Heatmap
-        </button>
-      </div>
-
-      {api.heatmap && (
-        <div className="heat-banner">
-          <div>
-            <strong>Accuracy on this neck</strong>
-            <p>
-              Gray has not been asked. Red was missed. Green was answered correctly. Darker reds and greens are the
-              ones to trust. Saved on this device, so it is still here after a reload.
-            </p>
-          </div>
-          <div className="heat-scale" aria-hidden="true">
-            <span>Missed</span>
-            <i />
-            <span>Accurate</span>
-          </div>
-          {api.weakest.length > 0 && (
-            <ul className="heat-weak">
-              {api.weakest.map((item) => (
-                <li key={item.label}>
-                  {item.label} · {Math.round(item.accuracy * 100)}%
-                </li>
-              ))}
-            </ul>
-          )}
+    <PracticeTab>
+      <div className="practice-main">
+        <div className="quiz-session" aria-label="Session">
+          <span>
+            <strong data-quiz-count={api.session.count}>{api.session.count}</strong> answered
+          </span>
+          <span>
+            Accuracy <strong>{accuracy}</strong>
+          </span>
+          <span>
+            Median <strong>{formatMs(api.session.medianMs)}</strong>
+          </span>
+          <button
+            type="button"
+            className={api.heatmap ? 'btn-mini active' : 'btn-mini'}
+            aria-pressed={api.heatmap}
+            onClick={() => api.setHeatmap(!api.heatmap)}
+          >
+            Heatmap
+          </button>
         </div>
-      )}
 
-      {!api.heatmap && (
-        <div className="note-quiz-ask">
-          <p className="quiz-kicker">{kind ? KIND_LABEL[kind] : 'Note quiz'}</p>
-          <p className="quiz-prompt" data-quiz-prompt data-question-type={kind ?? ''} aria-live="polite">
-            {api.feedback || question?.prompt || emptyMessage(api.empty)}
-          </p>
-          {draft && api.phase === 'ask' && question?.type === 'nameNote' && (
-            <p className="quiz-draft">
-              Typing <strong>{formatDraft(draft)}</strong> · Enter answers
+        {api.heatmap && (
+          <div className="heat-banner">
+            <div>
+              <strong>Accuracy on this neck</strong>
+              <p>
+                Gray has not been asked. Red was missed. Green was answered correctly. Darker reds and greens are the
+                ones to trust. Saved on this device, so it is still here after a reload.
+              </p>
+            </div>
+            <div className="heat-scale" aria-hidden="true">
+              <span>Missed</span>
+              <i />
+              <span>Accurate</span>
+            </div>
+            {api.weakest.length > 0 && (
+              <ul className="heat-weak">
+                {api.weakest.map((item) => (
+                  <li key={item.label}>
+                    {item.label} · {Math.round(item.accuracy * 100)}%
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {!api.heatmap && (
+          <div className="question-card" tabIndex={-1} ref={cardRef}>
+            <p className="quiz-kicker">{kind ? KIND_LABEL[kind] : 'Practice'}</p>
+            <p
+              className="quiz-prompt"
+              data-testid="quiz-prompt"
+              data-quiz-prompt
+              data-question-type={kind ?? ''}
+              data-question-id={question?.id ?? ''}
+              data-target-pc={targetPc ?? ''}
+              aria-live="polite"
+            >
+              {api.feedback || question?.prompt || emptyMessage(api.empty)}
             </p>
-          )}
-          {question?.type === 'findNote' && api.phase === 'ask' && (
-            <p className="quiz-draft">{api.pickedCount} selected · Enter submits</p>
-          )}
-
-          {showNamePad && (
-            <div className="quiz-pad" role="group" aria-label="Note names">
-              {pad.map((item) => (
-                <button key={item.pc} type="button" className="btn-mini" data-note={item.name} onClick={() => api.submitName(item.name)}>
-                  {item.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {showIntervalPad && (
-            <div className="quiz-pad" role="group" aria-label="Intervals">
-              {INTERVAL_NAMES.slice(1).map((name) => (
-                <button key={name} type="button" className="btn-mini" data-interval={name} onClick={() => api.submitInterval(name)}>
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="quiz-actions">
-            {question?.type === 'earInterval' && api.phase === 'ask' && (
-              <>
-                <button type="button" className="btn-mini" onClick={api.play}>
-                  Play
-                </button>
-                <button type="button" className="btn-mini" onClick={api.playTogether}>
-                  Together
-                </button>
-              </>
+            {draft && api.phase === 'ask' && question?.type === 'nameNote' && (
+              <p className="quiz-draft">
+                Typing <strong>{formatDraft(draft)}</strong>
+              </p>
             )}
             {question?.type === 'findNote' && api.phase === 'ask' && (
-              <button type="button" className="btn-mini" onClick={api.submitCells}>
-                Done
-              </button>
+              <p className="quiz-draft">
+                {api.pickedCount} selected · Enter submits
+              </p>
             )}
-            {api.phase === 'feedback' && (
-              <button type="button" className="btn-mini active" onClick={api.next}>
-                Next
-              </button>
+            {question?.type === 'nameNote' && api.phase === 'ask' && (
+              <p className="muted quiz-keys">Letters, then b or #.</p>
             )}
-            <span className="muted quiz-keys">Letters, then b or #. Enter continues.</span>
-          </div>
-        </div>
-      )}
 
-      <div className="note-quiz-settings">
+            {showNamePad && (
+              <div className="quiz-pad" role="group" aria-label="Note names">
+                {pad.map((item) => (
+                  <button
+                    key={item.pc}
+                    type="button"
+                    className="btn-mini"
+                    data-note={item.name}
+                    onClick={() => answerWith(() => api.submitName(item.name))}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {showIntervalPad && (
+              <div className="quiz-pad" role="group" aria-label="Intervals">
+                {INTERVAL_NAMES.slice(1).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className="btn-mini"
+                    data-interval={name}
+                    onClick={() => answerWith(() => api.submitInterval(name))}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="quiz-actions">
+              {question?.type === 'earInterval' && api.phase === 'ask' && (
+                <>
+                  <button type="button" className="btn-mini" onClick={api.play}>
+                    Play
+                  </button>
+                  <button type="button" className="btn-mini" onClick={api.playTogether}>
+                    Together
+                  </button>
+                </>
+              )}
+              {question?.type === 'findNote' && api.phase === 'ask' && (
+                <button type="button" className="btn-mini" onClick={() => answerWith(api.submitCells)}>
+                  Done
+                </button>
+              )}
+              {api.phase === 'feedback' && (
+                <button type="button" className="btn-mini active" onClick={() => answerWith(api.next)}>
+                  Next
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {neck}
+        {staff}
+      </div>
+
+      <aside className="practice-settings">
+        <h2>Where</h2>
         <div className="field">
           <label>Strings</label>
           <div className="str-toggles" role="group" aria-label="Quiz strings">
@@ -632,7 +705,7 @@ export function Quiz({
         </div>
         <div className="row">
           <div className="field">
-            <label htmlFor="quiz-fret-min">Quiz from</label>
+            <label htmlFor="quiz-fret-min">From</label>
             <input
               id="quiz-fret-min"
               type="number"
@@ -646,7 +719,7 @@ export function Quiz({
             />
           </div>
           <div className="field">
-            <label htmlFor="quiz-fret-max">Quiz to</label>
+            <label htmlFor="quiz-fret-max">To</label>
             <input
               id="quiz-fret-max"
               type="number"
@@ -660,20 +733,13 @@ export function Quiz({
             />
           </div>
         </div>
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={settings.naturalsOnly}
-            onChange={(event) => onSettings({ ...settings, naturalsOnly: event.target.checked })}
-          />
-          Naturals only
-        </label>
         <div className="field">
-          <label>Key spelling</label>
-          <div className="segmented" role="group" aria-label="Key context">
+          <label>Spelling</label>
+          <div className="segmented" role="group" aria-label="Spelling">
             <button
               type="button"
               className={settings.keyContext === 'none' ? 'active' : ''}
+              aria-pressed={settings.keyContext === 'none'}
               onClick={() => onSettings({ ...settings, keyContext: 'none' })}
             >
               Either spelling
@@ -681,45 +747,26 @@ export function Quiz({
             <button
               type="button"
               className={settings.keyContext === 'key' ? 'active' : ''}
+              aria-pressed={settings.keyContext === 'key'}
               onClick={() => onSettings({ ...settings, keyContext: 'key' })}
             >
-              {keyLabel}
+              Spell in the current key
             </button>
           </div>
         </div>
         <div className="field">
-          <label>Questions</label>
+          <label>Question types</label>
           <div className="quiz-types">
-            {(
-              [
-                ['nameNote', 'Name the note'],
-                ['findNote', 'Find every note'],
-                ['intervalFromRoot', 'Intervals'],
-                ['earInterval', 'Ear intervals'],
-              ] as const
-            ).map(([type, label]) => (
+            {QUESTION_TYPES.map(([type, label]) => (
               <label key={type} className="checkbox-row">
                 <input type="checkbox" checked={settings.types[type]} onChange={() => toggleType(type)} />
                 {label}
               </label>
             ))}
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={settings.harmonic}
-                onChange={(event) => onSettings({ ...settings, harmonic: event.target.checked })}
-              />
-              Play ear intervals together too
-            </label>
           </div>
         </div>
-        {neckClipped && (
-          <p className="quiz-draft">
-            The neck is showing frets {neckFrom}–{neckTo}. Quiz frets outside that window are hidden.
-          </p>
-        )}
-      </div>
-    </section>
+      </aside>
+    </PracticeTab>
   );
 }
 

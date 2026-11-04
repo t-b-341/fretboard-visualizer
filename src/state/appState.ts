@@ -1,7 +1,6 @@
 // Saved UI state: the JSON shape in localStorage and the address bar.
 // Merging a stored blob always returns a full AppState so older setups still load.
 
-import type { ProgressionSnapshot } from '../components/ProgressionControls';
 import {
   CHORD_QUALITIES,
   buildChord,
@@ -167,6 +166,17 @@ export function fitNoteQuiz(settings: NoteQuizSettings, numStrings: number, fret
     fretMax,
     strings,
   };
+}
+
+export interface ProgressionSnapshot {
+  chords: Chord[];
+  tempo: number;
+  beatsPerChord: number;
+  octave: number;
+  loop: boolean;
+  useSevenths: boolean;
+  spicy: boolean;
+  templateId: string;
 }
 
 export function defaultProgression(): ProgressionSnapshot {
@@ -362,6 +372,8 @@ function readNoteQuiz(v: unknown, numStrings: number, fretCount: number): NoteQu
         findNote: flag('findNote'),
         intervalFromRoot: flag('intervalFromRoot'),
         earInterval: flag('earInterval'),
+        chordTone: flag('chordTone'),
+        readStaff: flag('readStaff'),
       },
       harmonic: v.harmonic === true,
     },

@@ -238,6 +238,49 @@ describe('note quiz grading', () => {
     const namedInterval: NoteQuizQuestion = { ...reverse, reverse: false, type: 'intervalFromRoot' };
     expect(gradePlayedNote(namedInterval, 48, [root, target], 0, null)).toBeNull();
   });
+
+  it('grades a chord tone from one clicked cell and keeps it in the log', () => {
+    const hit = cell(1, 3, 3, 43);
+    const miss = cell(0, 0, 0, 40);
+    const question: NoteQuizQuestion = {
+      id: 'chord',
+      type: 'chordTone',
+      reverse: false,
+      prompt: 'Find the 5 of Ebmaj7',
+      answerCells: [hit],
+      answerText: '5',
+    };
+    const right = gradeAnswer(question, { cells: [hit] }, [hit, miss], 0, null);
+    expect(right.correct).toBe(true);
+    expect(right.entries[0]?.type).toBe('chordTone');
+    const wrong = gradeAnswer(question, { cells: [miss] }, [hit, miss], 0, null);
+    expect(wrong.correct).toBe(false);
+    expect(wrong.entries.map((entry) => entry.correct)).toEqual([false]);
+    expect(gradePlayedNote(question, 43, [hit, miss], 0, null)).toBeNull();
+  });
+
+  it('grades reading a staff note by name, by a matching cell, and from MIDI', () => {
+    const target = cell(1, 2, 3, 51);
+    const other = cell(2, 6, 3, 63);
+    const wrong = cell(0, 0, 0, 40);
+    const pool = [target, other, wrong];
+    const question: NoteQuizQuestion = {
+      id: 'staff',
+      type: 'readStaff',
+      reverse: false,
+      prompt: 'Read the note on the staff.',
+      target,
+      answerCells: [target, other],
+      answerText: 'Eb',
+    };
+    expect(gradeAnswer(question, { name: 'Eb' }, pool, 0, null).correct).toBe(true);
+    expect(gradeAnswer(question, { name: 'D#' }, pool, 0, null).correct).toBe(true);
+    expect(gradeAnswer(question, { name: 'E' }, pool, 0, null).correct).toBe(false);
+    expect(gradeAnswer(question, { cells: [other] }, pool, 0, null).correct).toBe(true);
+    expect(gradeAnswer(question, { cells: [wrong] }, pool, 0, null).correct).toBe(false);
+    expect(gradePlayedNote(question, 63, pool, 0, null)?.correct).toBe(true);
+    expect(gradePlayedNote(question, 64, pool, 0, null)?.correct).toBe(false);
+  });
 });
 
 describe('note quiz scheduler', () => {
@@ -254,9 +297,10 @@ describe('note quiz scheduler', () => {
   }
 
   function nameOnly(): NoteQuizSettings {
+    const settings = defaultNoteQuizSettings(7, 12);
     return {
-      ...defaultNoteQuizSettings(7, 12),
-      types: { nameNote: true, findNote: false, intervalFromRoot: false, earInterval: false },
+      ...settings,
+      types: { ...settings.types, nameNote: true, findNote: false, intervalFromRoot: false, earInterval: false },
     };
   }
 
@@ -319,6 +363,67 @@ describe('note quiz scheduler', () => {
       }
     }
     expect([...seen].sort()).toEqual(['earInterval', 'findNote', 'intervalFromRoot', 'intervalReverse', 'nameNote']);
+  });
+
+  it('asks reverse intervals with the same names as the pad', () => {
+    const tuning = getPreset('7-half-down');
+    const cells = buildGrid(tuning!.notes, 5).flat();
+    const base = defaultNoteQuizSettings(7, 5);
+    const settings = {
+      ...base,
+      fretMin: 0,
+      fretMax: 5,
+      types: { ...base.types, nameNote: false, findNote: false, intervalFromRoot: true, earInterval: false },
+    };
+    const prompts: string[] = [];
+    for (let seed = 0; seed < 40; seed++) {
+      const question = scheduleNoteQuestion({
+        log: [],
+        cells,
+        settings,
+        shift: 0,
+        key: null,
+        rnd: mulberry32(seed),
+      });
+      if (question?.reverse) prompts.push(question.prompt);
+    }
+    expect(prompts.length).toBeGreaterThan(0);
+    for (const prompt of prompts) {
+      expect(prompt).toMatch(/^Click the (m|M|P|A)\d+ above this root$/);
+      expect(prompt).not.toMatch(/the \d/);
+    }
+  });
+
+  it('builds a chord-tone question from the current key', () => {
+    const tuning = getPreset('7-half-down');
+    const cells = buildGrid(tuning!.notes, 5).flat();
+    const base = defaultNoteQuizSettings(7, 5);
+    const settings = {
+      ...base,
+      fretMin: 0,
+      fretMax: 5,
+      types: {
+        ...base.types,
+        nameNote: false,
+        findNote: false,
+        intervalFromRoot: false,
+        earInterval: false,
+        chordTone: true,
+      },
+    };
+    const question = scheduleNoteQuestion({
+      log: [],
+      cells,
+      settings,
+      shift: 0,
+      key: { rootPc: 3, intervals: major },
+      rnd: mulberry32(2),
+    });
+    expect(question?.type).toBe('chordTone');
+    expect(question?.prompt).toMatch(/^Find the .+ of /);
+    expect(question?.answerCells.length).toBeGreaterThan(0);
+    const pc = question?.answerCells[0]?.pc;
+    expect(question?.answerCells.every((item) => item.pc === pc)).toBe(true);
   });
 });
 

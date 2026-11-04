@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
@@ -6,4 +6,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 // computer and opened in a browser, with no install and no dev server.
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
+  test: {
+    // Playwright specs live in e2e/ and run through `playwright test`.
+    include: ['src/**/*.{test,spec}.ts'],
+  },
 });

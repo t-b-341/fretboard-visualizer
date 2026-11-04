@@ -189,18 +189,13 @@ function candidatesFor(
 }
 
 /**
- * Cheapest voice-leading path. Each chord keeps a back-pointer to the
- * predecessor that made arriving there cheapest, so a locally expensive
- * grip can still win if it saves cost later.
+ * Cheapest path through prepared candidate lists. Each step keeps a
+ * back-pointer to the predecessor that made arriving there cheapest, so a
+ * locally expensive voicing can still win if it saves cost later.
+ * Returns an index into each list. Every list must contain at least one voicing.
  */
-export function leadProgression(
-  chords: Chord[],
-  tuning: GuitarString[],
-  w: Weights = DEFAULT_WEIGHTS,
-  opts: LeadOptions = {},
-): Voicing[] {
-  if (chords.length === 0) return [];
-  const candidates = chords.map((chord, index) => candidatesFor(chord, index, tuning, w, opts));
+export function leadIndices(candidates: readonly (readonly Voicing[])[], w: Weights = DEFAULT_WEIGHTS): number[] {
+  if (candidates.length === 0) return [];
   const best: number[][] = [candidates[0].map((voicing) => voicingCost(voicing, w))];
   const back: number[][] = [candidates[0].map(() => -1)];
 
@@ -232,12 +227,28 @@ export function leadProgression(
     if (best[last][j] < best[last][chosen]) chosen = j;
   }
 
-  const path = new Array<Voicing>(candidates.length);
+  const indices = new Array<number>(candidates.length);
   for (let i = last; i >= 0; i--) {
-    path[i] = candidates[i][chosen];
+    indices[i] = chosen;
     chosen = back[i][chosen];
   }
-  return path;
+  return indices;
+}
+
+/**
+ * Cheapest voice-leading path. Each chord keeps a back-pointer to the
+ * predecessor that made arriving there cheapest, so a locally expensive
+ * grip can still win if it saves cost later.
+ */
+export function leadProgression(
+  chords: Chord[],
+  tuning: GuitarString[],
+  w: Weights = DEFAULT_WEIGHTS,
+  opts: LeadOptions = {},
+): Voicing[] {
+  if (chords.length === 0) return [];
+  const candidates = chords.map((chord, index) => candidatesFor(chord, index, tuning, w, opts));
+  return leadIndices(candidates, w).map((index, step) => candidates[step][index]);
 }
 
 /** Cheapest first grip, then the cheapest step at every chord. Same candidates as leadProgression. */

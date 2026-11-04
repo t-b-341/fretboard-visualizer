@@ -293,22 +293,6 @@ export function scaleToMidi(rootPc: number, intervals: number[], octave: number)
   return [...intervals.map((i) => rootMidi + i), rootMidi + 12];
 }
 
-/** Voice triad pitch classes as an ascending close-position chord. */
-export function triadToMidi(pitches: number[], octave: number): number[] {
-  const root = pitches[0];
-  const rootMidi = (octave + 1) * 12 + root;
-  return pitches.map((pc) => rootMidi + ((pc - root + 12) % 12));
-}
-
-/**
- * Voice a chord as spread MIDI notes from its intervals (semitones above the
- * root, which may exceed 12 for upper extensions). `octave` 4 -> root MIDI 60.
- */
-export function chordToMidi(rootPc: number, intervalsFromRoot: number[], octave: number): number[] {
-  const rootMidi = (octave + 1) * 12 + rootPc;
-  return intervalsFromRoot.map((i) => rootMidi + i);
-}
-
 export interface MidiFileOptions {
   bpm?: number; // quarter-note tempo written into the file
   beatsPerChord?: number; // how long each chord lasts, in beats
@@ -321,7 +305,7 @@ export interface MidiFileOptions {
 /**
  * Encode a chord progression as a Standard MIDI File (format 0) and return the
  * raw bytes, ready to wrap in a Blob for download. Each entry in `chords` is one
- * chord's MIDI note numbers (e.g. from chordToMidi); chords play back-to-back,
+ * chord's MIDI note numbers; chords play back-to-back,
  * each lasting `beatsPerChord` beats. Pure data — no Web MIDI, no dependencies,
  * so it works even where MIDI output is unavailable.
  */
